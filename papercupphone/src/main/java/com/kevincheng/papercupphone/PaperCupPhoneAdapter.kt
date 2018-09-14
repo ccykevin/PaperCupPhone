@@ -7,11 +7,11 @@ import org.greenrobot.eventbus.EventBus
 
 class PaperCupPhoneAdapter {
     companion object {
-        fun connect(context: Context, brokerURI: String, topicPrefix: String, subscriptionTopics: Array<String>, qosArray: IntArray, isAutomaticReconnect: Boolean, isCleanSession: Boolean, keepAliveInterval: Int) {
+        fun connect(context: Context, brokerURI: String, topicPrefix: String, subscriptionTopics: Array<String>, qosArray: IntArray, isAutomaticReconnect: Boolean, isCleanSession: Boolean, keepAliveInterval: Int, retryInterval: Int) {
             // If already running, it will restart service
             disconnect(context)
             val intent = Intent(context, PaperCupPhone::class.java)
-            val launcher = PaperCupPhone.Launcher(brokerURI, topicPrefix, subscriptionTopics, qosArray, isAutomaticReconnect, isCleanSession, keepAliveInterval)
+            val launcher = PaperCupPhone.Launcher(brokerURI, topicPrefix, subscriptionTopics, qosArray, isAutomaticReconnect, isCleanSession, keepAliveInterval, retryInterval)
             intent.putExtra(PaperCupPhone.Launcher.name, launcher)
             context.startService(intent)
         }

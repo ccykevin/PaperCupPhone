@@ -26,8 +26,9 @@ class MainActivity : AppCompatActivity() {
         val isAutoReconnect = true
         val isCleanSession = true
         val keepAliveInternal =  30
+        val retryInterval = 15
 
-        PaperCupPhoneAdapter.connect(this, brokerURI, "", subscriptionTopics, qosArray, isAutoReconnect, isCleanSession, keepAliveInternal)
+        PaperCupPhoneAdapter.connect(this, brokerURI, "", subscriptionTopics, qosArray, isAutoReconnect, isCleanSession, keepAliveInternal, retryInterval)
     }
 
     override fun onDestroy() {
