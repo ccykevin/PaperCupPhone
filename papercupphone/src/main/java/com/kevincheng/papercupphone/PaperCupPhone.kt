@@ -7,8 +7,8 @@ import android.system.ErrnoException
 import android.system.OsConstants
 import android.util.Log
 import android.widget.Toast
+import com.kevincheng.papercupphone.paho.MqttAndroidClientExtended
 import com.orhanobut.logger.Logger
-import org.eclipse.paho.android.service.MqttAndroidClient
 import org.eclipse.paho.client.mqttv3.*
 import org.greenrobot.eventbus.EventBus
 import org.greenrobot.eventbus.Subscribe
@@ -26,17 +26,6 @@ class PaperCupPhone : Service() {
     companion object {
         val TAG = PaperCupPhone::class.java.simpleName
         var isRunning: Boolean = false
-
-        fun disconnect(client: MqttAndroidClient) {
-            try {
-                Logger.i("Connection[${client.clientId}] Trying To Disconnect From The Broker")
-                client.disconnect(0)
-                Logger.i("Connection[${client.clientId}] Disconnected From The Broker")
-            } catch (ex: Exception) {
-                if (ex is NullPointerException) return
-                Logger.e(ex, "throwable")
-            }
-        }
     }
 
     private lateinit var mBackgroundThread: HandlerThread
@@ -44,7 +33,7 @@ class PaperCupPhone : Service() {
     private lateinit var mCommunicationThread: HandlerThread
     private lateinit var mCommunicationHandler: Handler
     private lateinit var mBrokerURI: String
-    private lateinit var mMQTTAndroidClient: MqttAndroidClient
+    private lateinit var mMQTTAndroidClient: MqttAndroidClientExtended
     private lateinit var mMQTTConnectOptions: MqttConnectOptions
     private lateinit var mClientId: String
     private lateinit var mCallback: MQTTCallback
@@ -60,12 +49,14 @@ class PaperCupPhone : Service() {
     private var isAutomaticReconnect: Boolean = false
     private var isCleanSession: Boolean = true
     private var keepAliveInterval: Int = 60
+    private var retryInterval: Int = 15
     private var isConnectionCompletedOnce: Boolean = false
     private var isDestroyed: Boolean = false
     private var didSetupDisconnectedBufferOptions: Boolean = false
 
     override fun onCreate() {
         isRunning = true
+        Toast.makeText(applicationContext, "Start MQTT Service", Toast.LENGTH_SHORT).show()
         mBackgroundThread = HandlerThread("PaperCupPhone-BackgroundThread", Process.THREAD_PRIORITY_BACKGROUND)
         mBackgroundThread.start()
         mBackgroundHandler = Handler(mBackgroundThread.looper)
@@ -95,10 +86,11 @@ class PaperCupPhone : Service() {
         isAutomaticReconnect = launcher.isAutomaticReconnect
         isCleanSession = launcher.isCleanSession
         keepAliveInterval = launcher.keepAliveInterval
+        retryInterval = launcher.retryInterval
         mMQTTConnectionListener = MQTTConnectionListener(WeakReference(this@PaperCupPhone))
 
         // Config Mqtt Client
-        mMQTTAndroidClient = MqttAndroidClient(applicationContext, mBrokerURI, mClientId)
+        mMQTTAndroidClient = MqttAndroidClientExtended(applicationContext, mBrokerURI, mClientId)
         mCallback = MQTTCallback(false, isCleanSession, WeakReference(this@PaperCupPhone), WeakReference(mMQTTAndroidClient), mClientId)
         mMQTTAndroidClient.setCallback(mCallback)
         mMQTTConnectOptions = MqttConnectOptions()
@@ -106,25 +98,24 @@ class PaperCupPhone : Service() {
         mMQTTConnectOptions.isCleanSession = isCleanSession
         mMQTTConnectOptions.keepAliveInterval = keepAliveInterval
 
-        Toast.makeText(applicationContext, "Start MQTT Service", Toast.LENGTH_SHORT).show()
-        Logger.i("Service Has Started\nClient Id: $mClientId")
-
         mConnectToBrokerRunnable = ConnectToBrokerRunnable(WeakReference(this@PaperCupPhone))
         mBackgroundHandler.post(mConnectToBrokerRunnable)
+
+        Logger.i("Service Has Started\nClient Id: $mClientId")
 
         return Service.START_NOT_STICKY
     }
 
     override fun onDestroy() {
         isRunning = false
-        EventBus.getDefault().unregister(this@PaperCupPhone)
         Toast.makeText(applicationContext, "Stop MQTT Service", Toast.LENGTH_SHORT).show()
+        EventBus.getDefault().unregister(this@PaperCupPhone)
         mBackgroundHandler.removeCallbacksAndMessages(null)
         mBackgroundThread.quit()
         mCommunicationHandler.removeCallbacksAndMessages(null)
         mCommunicationThread.quit()
 
-        disconnect(mMQTTAndroidClient)
+        mMQTTAndroidClient.disconnectImmediately()
         super.onDestroy()
         isDestroyed = true
         Logger.i("Service Has Been Destroyed\nClient Id: $mClientId")
@@ -148,7 +139,7 @@ class PaperCupPhone : Service() {
     }
 
     private fun reconnectToBroker() {
-        val interval: Long = 5000
+        val interval: Long = (retryInterval * 1000).toLong()
         Logger.v("Retry The Connection After $interval Milliseconds")
         mBackgroundHandler.postDelayed(mConnectToBrokerRunnable, interval)
     }
@@ -169,9 +160,7 @@ class PaperCupPhone : Service() {
                 nullableListener = listener
                 gate = listener.gate
             }
-            null -> {
-                nullableListener = SubscriptionListener(WeakReference(this@PaperCupPhone), topic, qos, gate)
-            }
+            null -> nullableListener = SubscriptionListener(WeakReference(this@PaperCupPhone), topic, qos, gate)
         }
 
         try {
@@ -232,17 +221,17 @@ class PaperCupPhone : Service() {
 
     @Subscribe(threadMode = ThreadMode.BACKGROUND)
     fun onMessageEvent(event: PaperCupPhone.Event.Topic.Subscribe) {
-        mCommunicationHandler.post(SubscriptionRunnable(WeakReference(this@PaperCupPhone), event, keepAliveInterval))
+        mCommunicationHandler.post(SubscriptionRunnable(WeakReference(this@PaperCupPhone), event, retryInterval))
     }
 
     @Subscribe(threadMode = ThreadMode.BACKGROUND)
     fun onMessageEvent(event: PaperCupPhone.Event.Topic.Unsubscribe) {
-        mCommunicationHandler.post(UnsubscribeRunnable(WeakReference(this@PaperCupPhone), event, keepAliveInterval))
+        mCommunicationHandler.post(UnsubscribeRunnable(WeakReference(this@PaperCupPhone), event, retryInterval))
     }
 
     @Subscribe(threadMode = ThreadMode.BACKGROUND)
     fun onMessageEvent(event: PaperCupPhone.Event.Topic.PublishMessage) {
-        mCommunicationHandler.post(PublishMessageRunnable(WeakReference(this@PaperCupPhone), event, keepAliveInterval))
+        mCommunicationHandler.post(PublishMessageRunnable(WeakReference(this@PaperCupPhone), event, retryInterval))
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)
@@ -306,7 +295,7 @@ class PaperCupPhone : Service() {
         }
     }
 
-    private class MQTTCallback(var isInitialized: Boolean, val isCleanSession: Boolean, val weakSelf: WeakReference<PaperCupPhone>, val weakClient: WeakReference<MqttAndroidClient>, val clientId: String) : MqttCallbackExtended {
+    private class MQTTCallback(var isInitialized: Boolean, val isCleanSession: Boolean, val weakSelf: WeakReference<PaperCupPhone>, val weakClient: WeakReference<MqttAndroidClientExtended>, val clientId: String) : MqttCallbackExtended {
         override fun connectComplete(reconnect: Boolean, serverURI: String?) {
             Logger.d("Connection[$clientId] Completed")
             val self = weakSelf.get()
@@ -335,9 +324,9 @@ class PaperCupPhone : Service() {
                 when {
                     self == null -> {
                         val client = weakClient.get() ?: return
-                        disconnect(client)
+                        client.disconnectImmediately()
                     }
-                    self.isDestroyed -> disconnect(self.mMQTTAndroidClient)
+                    self.isDestroyed -> self.mMQTTAndroidClient.disconnectImmediately()
                 }
             }
         }
@@ -615,7 +604,7 @@ class PaperCupPhone : Service() {
         }
     }
 
-    data class Launcher(val brokerURI: String, val topicPrefix: String, val topic: Array<String>, val qos: IntArray, val isAutomaticReconnect: Boolean, val isCleanSession: Boolean, val keepAliveInterval: Int) : Serializable {
+    data class Launcher(val brokerURI: String, val topicPrefix: String, val topic: Array<String>, val qos: IntArray, val isAutomaticReconnect: Boolean, val isCleanSession: Boolean, val keepAliveInterval: Int, val retryInterval: Int) : Serializable {
         companion object {
             const val name = "Launcher"
         }
