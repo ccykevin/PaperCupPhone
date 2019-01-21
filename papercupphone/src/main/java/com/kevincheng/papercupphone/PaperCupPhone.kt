@@ -198,7 +198,7 @@ class PaperCupPhone : Service() {
         val jsonObject = JSONObject()
         jsonObject.put("action", "connectionStatus")
         jsonObject.put("status", status)
-        EventBus.getDefault().post(Event.IncomingMessage(jsonObject))
+        EventBus.getDefault().post(Event.IncomingMessage(null, jsonObject))
     }
 
     private fun setupOfflinePublishingMessageBuffer() {
@@ -354,7 +354,7 @@ class PaperCupPhone : Service() {
             if (message != null && !self.isDestroyed) {
                 try {
                     val jsonObject = JSONObject(message.toString())
-                    EventBus.getDefault().post(Event.IncomingMessage(jsonObject))
+                    EventBus.getDefault().post(Event.IncomingMessage(topic, jsonObject))
                 } catch (e: JSONException) {
                     Logger.e(e, "throwable", message)
                 }
@@ -611,7 +611,7 @@ class PaperCupPhone : Service() {
     }
 
     sealed class Event {
-        data class IncomingMessage(val jsonObject: JSONObject) : Event()
+        data class IncomingMessage(val topic: String?, val jsonObject: JSONObject) : Event()
         object GetConnectionStatus : Event()
 
         sealed class Topic {
