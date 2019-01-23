@@ -564,19 +564,24 @@ class PaperCupPhone : Service() {
         override fun run() {
             val self = weakSelf.get() ?: return
             whileloop@ while (!self.isDestroyed) {
+                val gate = CountDownLatch(1)
                 var isSuccess = false
                 if (self.isConnectionCompletedOnce) {
                     try {
-                        val message = MqttMessage()
-                        message.payload = event.message.toByteArray()
-                        message.qos = event.qos
-                        message.isRetained = event.isRetained
-                        self.mMQTTAndroidClient.publish(event.topic, message) // If publish message is not instance of MqttMessage, it cannot store in message buffer
                         Logger.d("Publish Message <${event.message}> to <${event.topic}>")
-                        if (!self.mMQTTAndroidClient.isConnected) {
-                            Logger.v("There are ${self.mMQTTAndroidClient.bufferedMessageCount} messages in buffer.")
-                        }
-                        isSuccess = true
+                        // If publish message is not class of MqttMessage, it cannot store in message buffer
+                        self.mMQTTAndroidClient.publish(event.topic, event.message.toByteArray(), event.qos, event.isRetained, null, object: IMqttActionListener {
+                            override fun onSuccess(asyncActionToken: IMqttToken?) {
+                                isSuccess = true
+                                gate.countDown()
+                            }
+
+                            override fun onFailure(asyncActionToken: IMqttToken?, exception: Throwable?) {
+                                Logger.e(exception, "Publish Message Failed")
+                                isSuccess = false
+                                gate.countDown()
+                            }
+                        })
                     } catch (ex: MqttPersistenceException) {
                         Logger.e(ex, "When a problem occurs storing the message")
                         break@whileloop
@@ -593,6 +598,7 @@ class PaperCupPhone : Service() {
                 } else {
                     Logger.i("Unable To Publish Message When Connection Has Not Been Successful")
                 }
+                gate.await()
                 when (isSuccess) {
                     true -> break@whileloop
                     else -> {
