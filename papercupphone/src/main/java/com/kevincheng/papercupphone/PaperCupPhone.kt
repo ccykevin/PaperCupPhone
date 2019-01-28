@@ -54,10 +54,12 @@ class PaperCupPhone : Service() {
 
     override fun onCreate() {
         isRunning = true
-        mBackgroundThread = HandlerThread("PaperCupPhone-BackgroundThread", Process.THREAD_PRIORITY_BACKGROUND)
+        mBackgroundThread =
+            HandlerThread("PaperCupPhone-BackgroundThread", Process.THREAD_PRIORITY_BACKGROUND)
         mBackgroundThread.start()
         mBackgroundHandler = Handler(mBackgroundThread.looper)
-        mCommunicationThread = HandlerThread("PaperCupPhone-CommunicationThread", Process.THREAD_PRIORITY_BACKGROUND)
+        mCommunicationThread =
+            HandlerThread("PaperCupPhone-CommunicationThread", Process.THREAD_PRIORITY_BACKGROUND)
         mCommunicationThread.start()
         mCommunicationHandler = Handler(mCommunicationThread.looper)
         EventBus.getDefault().register(this@PaperCupPhone)
@@ -70,7 +72,7 @@ class PaperCupPhone : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent == null) throw NoSuchElementException()
         val launcher = intent.getSerializableExtra(Launcher.name) as? Launcher
-                ?: throw NoSuchElementException()
+            ?: throw NoSuchElementException()
 
         mClientId = launcher.client.id
         mBrokerURI = launcher.client.brokerURI
@@ -88,10 +90,16 @@ class PaperCupPhone : Service() {
 
         // Config Mqtt Client
         mMQTTAndroidClient = MqttAndroidClientExtended(applicationContext, mBrokerURI, mClientId)
-        mCallback = MQTTCallback(false, isCleanSession, WeakReference(this@PaperCupPhone), WeakReference(mMQTTAndroidClient), mClientId)
+        mCallback = MQTTCallback(
+            false,
+            isCleanSession,
+            WeakReference(this@PaperCupPhone),
+            WeakReference(mMQTTAndroidClient),
+            mClientId
+        )
         mMQTTAndroidClient.setCallback(mCallback)
         mMQTTConnectOptions = MqttConnectOptions()
-        mMQTTConnectOptions.isAutomaticReconnect = isAutomaticReconnect
+        mMQTTConnectOptions.isAutomaticReconnect = false
         mMQTTConnectOptions.isCleanSession = isCleanSession
         mMQTTConnectOptions.keepAliveInterval = keepAliveInterval
         launcher.connectOptions.account?.apply {
@@ -147,13 +155,21 @@ class PaperCupPhone : Service() {
     }
 
     private fun initializeSubscription() {
-        when(mInitializeSubscriptionTopic.isNotEmpty()) {
-            true -> subscribeTopic(mInitializeSubscriptionTopic, mInitializeSubscriptionQoS, InitializeSubscriptionListener(WeakReference(this@PaperCupPhone), CountDownLatch(1)))
+        when (mInitializeSubscriptionTopic.isNotEmpty()) {
+            true -> subscribeTopic(
+                mInitializeSubscriptionTopic,
+                mInitializeSubscriptionQoS,
+                InitializeSubscriptionListener(WeakReference(this@PaperCupPhone), CountDownLatch(1))
+            )
             false -> mCallback.isInitialized = true
         }
     }
 
-    private fun subscribeTopic(topic: Array<String>, qos: IntArray, listener: IMqttActionListener?) {
+    private fun subscribeTopic(
+        topic: Array<String>,
+        qos: IntArray,
+        listener: IMqttActionListener?
+    ) {
         var nullableListener: IMqttActionListener? = null
         var gate: CountDownLatch = CountDownLatch(1)
         when (listener) {
@@ -165,7 +181,8 @@ class PaperCupPhone : Service() {
                 nullableListener = listener
                 gate = listener.gate
             }
-            null -> nullableListener = SubscriptionListener(WeakReference(this@PaperCupPhone), topic, qos, gate)
+            null -> nullableListener =
+                SubscriptionListener(WeakReference(this@PaperCupPhone), topic, qos, gate)
         }
 
         try {
@@ -176,7 +193,10 @@ class PaperCupPhone : Service() {
                 is NullPointerException -> Logger.v("Service Has Been Destroyed And The Above Operations Will Be Cancelled")
                 else -> {
                     when (ex) {
-                        is IllegalArgumentException -> Logger.e(ex, "Two Supplied Arrays Are Not The Same Size")
+                        is IllegalArgumentException -> Logger.e(
+                            ex,
+                            "Two Supplied Arrays Are Not The Same Size"
+                        )
                         is MqttException -> Logger.e(ex, "An Error Registering The Subscription.")
                         else -> Logger.e(ex, "throwable")
                     }
@@ -222,17 +242,35 @@ class PaperCupPhone : Service() {
 
     @Subscribe(threadMode = ThreadMode.BACKGROUND)
     fun onMessageEvent(event: PaperCupPhone.Event.Topic.Subscribe) {
-        mCommunicationHandler.post(SubscriptionRunnable(WeakReference(this@PaperCupPhone), event, retryInterval))
+        mCommunicationHandler.post(
+            SubscriptionRunnable(
+                WeakReference(this@PaperCupPhone),
+                event,
+                retryInterval
+            )
+        )
     }
 
     @Subscribe(threadMode = ThreadMode.BACKGROUND)
     fun onMessageEvent(event: PaperCupPhone.Event.Topic.Unsubscribe) {
-        mCommunicationHandler.post(UnsubscribeRunnable(WeakReference(this@PaperCupPhone), event, retryInterval))
+        mCommunicationHandler.post(
+            UnsubscribeRunnable(
+                WeakReference(this@PaperCupPhone),
+                event,
+                retryInterval
+            )
+        )
     }
 
     @Subscribe(threadMode = ThreadMode.BACKGROUND)
     fun onMessageEvent(event: PaperCupPhone.Event.Topic.PublishMessage) {
-        mCommunicationHandler.post(PublishMessageRunnable(WeakReference(this@PaperCupPhone), event, retryInterval))
+        mCommunicationHandler.post(
+            PublishMessageRunnable(
+                WeakReference(this@PaperCupPhone),
+                event,
+                retryInterval
+            )
+        )
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)
@@ -240,7 +278,8 @@ class PaperCupPhone : Service() {
         sendOutConnectionStatus()
     }
 
-    private class MQTTConnectionListener(val weakSelf: WeakReference<PaperCupPhone>) : IMqttActionListener {
+    private class MQTTConnectionListener(val weakSelf: WeakReference<PaperCupPhone>) :
+        IMqttActionListener {
         override fun onSuccess(asyncActionToken: IMqttToken) {
             val self = weakSelf.get() ?: return
             Logger.d("Connection[${self.mClientId}] Succeeded Between ${self.mBrokerURI}")
@@ -249,67 +288,20 @@ class PaperCupPhone : Service() {
         override fun onFailure(asyncActionToken: IMqttToken, exception: Throwable) {
             val self = weakSelf.get() ?: return
             Logger.w("Connection[${self.mClientId}] Failed Between ${self.mBrokerURI}")
-            var hasBeenHandled = true
-            when(exception) {
-                is MqttException -> {
-                    when {
-                        exception.reasonCode == 32103 -> self.reconnectToBroker()
-                        exception.reasonCode == 0 && exception.cause == null -> self.reconnectToBroker()
-                        exception.reasonCode == 0 && exception.cause is NoRouteToHostException -> self.reconnectToBroker()
-                        else -> {
-                            hasBeenHandled = false
-                            Logger.d("underlying reason@${exception.reasonCode} cause@${exception.cause}")
-                        }
-                    }
-                }
-                else -> {
-                    val expectedException = exception.cause?.cause
-                    if (expectedException != null) {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                            val errnoException = expectedException as? ErrnoException
-                            if (errnoException != null) {
-                                when (errnoException.errno) {
-                                    OsConstants.ENETUNREACH -> Logger.w("There Is No Internet Connection, But It Should Automatically Reconnect When The Internet Is Available")
-                                    else -> {
-                                        when (errnoException.errno) {
-                                            OsConstants.ECONNREFUSED -> Logger.w("The Host Is Online But Connection to Broker Failed")
-                                            OsConstants.EHOSTUNREACH -> Logger.w("The Host Is Offline")
-                                            else -> hasBeenHandled = false
-                                        }
-                                        self.reconnectToBroker()
-                                    }
-                                }
-                            } else {
-                                hasBeenHandled = false
-                            }
-                        } else {
-                            val message = expectedException.message
-                            if (message != null) {
-                                when {
-                                    message.contains("ENETUNREACH") -> Logger.w("There Is No Internet Connection, But It Should Automatically Reconnect When The Internet Is Available")
-                                    else -> {
-                                        when {
-                                            message.contains("ECONNREFUSED") -> Logger.w("The Host Is Online But Connection to Broker Failed")
-                                            message.contains("EHOSTUNREACH") -> Logger.w("The Host Is Offline")
-                                            else -> hasBeenHandled = false
-                                        }
-                                        self.reconnectToBroker()
-                                    }
-                                }
-                            } else {
-                                hasBeenHandled = false
-                            }
-                        }
-                    } else {
-                        hasBeenHandled = false
-                    }
-                }
-            }
-            if (!hasBeenHandled) Logger.e(exception, "Unexpected Throwable")
+
+            Logger.e(exception, "Unexpected Throwable")
+
+            if (self.isAutomaticReconnect) self.reconnectToBroker()
         }
     }
 
-    private class MQTTCallback(var isInitialized: Boolean, val isCleanSession: Boolean, val weakSelf: WeakReference<PaperCupPhone>, val weakClient: WeakReference<MqttAndroidClientExtended>, val clientId: String) : MqttCallbackExtended {
+    private class MQTTCallback(
+        var isInitialized: Boolean,
+        val isCleanSession: Boolean,
+        val weakSelf: WeakReference<PaperCupPhone>,
+        val weakClient: WeakReference<MqttAndroidClientExtended>,
+        val clientId: String
+    ) : MqttCallbackExtended {
         override fun connectComplete(reconnect: Boolean, serverURI: String?) {
             Logger.d("Connection[$clientId] Completed")
             val self = weakSelf.get()
@@ -320,16 +312,16 @@ class PaperCupPhone : Service() {
                 self.sendOutConnectionStatus()
                 self.mBackgroundHandler.post {
                     val self = weakSelf.get() ?: return@post
-                    when (reconnect) {
+                    when (isInitialized) {
                         true -> {
-                            if (!isInitialized) {
-                                self.initializeSubscription()
-                                return@post
-                            }
                             if (!isCleanSession) return@post
                             // If Clean Session is true and cached topics is not empty, we need to re-subscribe
                             when {
-                                self.mCachedSubscriptionTopic.isNotEmpty() -> self.subscribeTopic(self.mCachedSubscriptionTopic, self.mCachedSubscriptionQoS, null)
+                                self.mCachedSubscriptionTopic.isNotEmpty() -> self.subscribeTopic(
+                                    self.mCachedSubscriptionTopic,
+                                    self.mCachedSubscriptionQoS,
+                                    null
+                                )
                             }
                         }
                         false -> self.initializeSubscription()
@@ -361,6 +353,8 @@ class PaperCupPhone : Service() {
                 self.mSubscriptionQoS = IntArray(0)
                 tempSubscriptionTopic.forEach { self.mCachedSubscriptionTopic += it }
                 tempSubscriptionQoS.forEach { self.mCachedSubscriptionQoS += it }
+
+                if (self.isAutomaticReconnect) self.reconnectToBroker()
             }
         }
 
@@ -377,18 +371,27 @@ class PaperCupPhone : Service() {
         }
 
         override fun deliveryComplete(token: IMqttDeliveryToken?) {
-            Logger.d("Connection[$clientId] Publishing Message<${token?.message
-                    ?: ""}> Has Been Completed")
+            Logger.d(
+                "Connection[$clientId] Publishing Message<${token?.message
+                    ?: ""}> Has Been Completed"
+            )
         }
     }
 
-    private class InitializeSubscriptionListener(val weakSelf: WeakReference<PaperCupPhone>, val gate: CountDownLatch) : IMqttActionListener {
+    private class InitializeSubscriptionListener(
+        val weakSelf: WeakReference<PaperCupPhone>,
+        val gate: CountDownLatch
+    ) : IMqttActionListener {
         override fun onSuccess(asyncActionToken: IMqttToken?) {
             val self = weakSelf.get() ?: return
             self.mCallback.isInitialized = true
             self.mSubscriptionTopic += self.mInitializeSubscriptionTopic
             self.mSubscriptionQoS += self.mInitializeSubscriptionQoS
-            Logger.d("Topics${Arrays.toString(self.mInitializeSubscriptionTopic)} Subscription Success\nCurrent: ${Arrays.toString(self.mSubscriptionTopic)},${Arrays.toString(self.mSubscriptionQoS)}")
+            Logger.d(
+                "Topics${Arrays.toString(self.mInitializeSubscriptionTopic)} Subscription Success\nCurrent: ${Arrays.toString(
+                    self.mSubscriptionTopic
+                )},${Arrays.toString(self.mSubscriptionQoS)}"
+            )
             gate.countDown()
         }
 
@@ -399,28 +402,33 @@ class PaperCupPhone : Service() {
         }
     }
 
-    private class SubscriptionListener(val weakSelf: WeakReference<PaperCupPhone>, val topic: Array<String>, val qos: IntArray, val gate: CountDownLatch) : IMqttActionListener {
+    private class SubscriptionListener(
+        val weakSelf: WeakReference<PaperCupPhone>,
+        val topic: Array<String>,
+        val qos: IntArray,
+        val gate: CountDownLatch
+    ) : IMqttActionListener {
         override fun onSuccess(asyncActionToken: IMqttToken?) {
             val self = weakSelf.get() ?: return
             self.mSubscriptionTopic += topic
             self.mSubscriptionQoS += qos
             val cachedSubscriptionTopicList = self.mCachedSubscriptionTopic.toMutableList()
+            val cachedQoSList = self.mCachedSubscriptionQoS.toMutableList()
+
             topic.forEach {
                 val index = cachedSubscriptionTopicList.indexOf(it)
                 if (index == -1) return@forEach
                 cachedSubscriptionTopicList.removeAt(index)
-            }
-            self.mCachedSubscriptionTopic = cachedSubscriptionTopicList.toTypedArray()
-
-            val cachedQoSList = self.mCachedSubscriptionQoS.toMutableList()
-            qos.forEach {
-                val index = cachedQoSList.indexOf(it)
-                if (index == -1) return@forEach
                 cachedQoSList.removeAt(index)
             }
+            self.mCachedSubscriptionTopic = cachedSubscriptionTopicList.toTypedArray()
             self.mCachedSubscriptionQoS = IntArray(cachedQoSList.size) { cachedQoSList[it] }
 
-            Logger.d("Topics${Arrays.toString(topic)} Subscription Success\nCurrent: ${Arrays.toString(self.mSubscriptionTopic)},${Arrays.toString(self.mSubscriptionQoS)}")
+            Logger.d(
+                "Topics${Arrays.toString(topic)} Subscription Success\nCurrent: ${Arrays.toString(
+                    self.mSubscriptionTopic
+                )},${Arrays.toString(self.mSubscriptionQoS)}"
+            )
             gate.countDown()
         }
 
@@ -438,14 +446,20 @@ class PaperCupPhone : Service() {
         }
     }
 
-    private class SubscriptionRunnable(val weakSelf: WeakReference<PaperCupPhone>, val event: PaperCupPhone.Event.Topic.Subscribe, val retryInterval: Int) : Runnable {
+    private class SubscriptionRunnable(
+        val weakSelf: WeakReference<PaperCupPhone>,
+        val event: PaperCupPhone.Event.Topic.Subscribe,
+        val retryInterval: Int
+    ) : Runnable {
         override fun run() {
             val self = weakSelf.get() ?: return
             if (self.isDestroyed) return
 
             val validSubscriptionIndexArray = ArrayList<Int>()
             event.topic.forEachIndexed { index, element ->
-                if (!self.mSubscriptionTopic.contains(element)) validSubscriptionIndexArray.add(index)
+                if (!self.mSubscriptionTopic.contains(element)) validSubscriptionIndexArray.add(
+                    index
+                )
             }
             if (validSubscriptionIndexArray.size == 0) {
                 Logger.w("Subscribe Duplicate Topics: ${Arrays.toString(event.topic)}")
@@ -458,7 +472,8 @@ class PaperCupPhone : Service() {
                 validSubscriptionTopicsArrayList.add(event.topic[index])
                 validQoSArrayList.add(event.qos[index])
             }
-            val validSubscriptionTopics: Array<String> = Array(validSubscriptionTopicsArrayList.size) { validSubscriptionTopicsArrayList[it] }
+            val validSubscriptionTopics: Array<String> =
+                Array(validSubscriptionTopicsArrayList.size) { validSubscriptionTopicsArrayList[it] }
             val validQoSs = IntArray(validQoSArrayList.size) { validQoSArrayList[it] }
 
             whileloop@ while (!self.isDestroyed) {
@@ -466,20 +481,31 @@ class PaperCupPhone : Service() {
                 var isSuccess = false
                 if (self.isConnectionCompletedOnce) {
                     try {
-                        self.mMQTTAndroidClient.subscribe(validSubscriptionTopics, validQoSs, null, object : IMqttActionListener {
-                            override fun onSuccess(asyncActionToken: IMqttToken?) {
-                                isSuccess = true
-                                self.mSubscriptionTopic += validSubscriptionTopics
-                                self.mSubscriptionQoS += validQoSs
-                                Logger.d("Topics${Arrays.toString(event.topic)} Subscription Success\nCurrent: ${Arrays.toString(self.mSubscriptionTopic)},${Arrays.toString(self.mSubscriptionQoS)}")
-                                gate.countDown()
-                            }
+                        self.mMQTTAndroidClient.subscribe(
+                            validSubscriptionTopics,
+                            validQoSs,
+                            null,
+                            object : IMqttActionListener {
+                                override fun onSuccess(asyncActionToken: IMqttToken?) {
+                                    isSuccess = true
+                                    self.mSubscriptionTopic += validSubscriptionTopics
+                                    self.mSubscriptionQoS += validQoSs
+                                    Logger.d(
+                                        "Topics${Arrays.toString(event.topic)} Subscription Success\nCurrent: ${Arrays.toString(
+                                            self.mSubscriptionTopic
+                                        )},${Arrays.toString(self.mSubscriptionQoS)}"
+                                    )
+                                    gate.countDown()
+                                }
 
-                            override fun onFailure(asyncActionToken: IMqttToken?, exception: Throwable?) {
-                                Logger.w("Topics${Arrays.toString(event.topic)} Subscription Failed")
-                                gate.countDown()
-                            }
-                        })
+                                override fun onFailure(
+                                    asyncActionToken: IMqttToken?,
+                                    exception: Throwable?
+                                ) {
+                                    Logger.w("Topics${Arrays.toString(event.topic)} Subscription Failed")
+                                    gate.countDown()
+                                }
+                            })
                     } catch (ex: MqttException) {
                         Logger.e(ex, "throwable")
                         break@whileloop
@@ -503,7 +529,11 @@ class PaperCupPhone : Service() {
         }
     }
 
-    private class UnsubscribeRunnable(val weakSelf: WeakReference<PaperCupPhone>, val event: PaperCupPhone.Event.Topic.Unsubscribe, val retryInterval: Int) : Runnable {
+    private class UnsubscribeRunnable(
+        val weakSelf: WeakReference<PaperCupPhone>,
+        val event: PaperCupPhone.Event.Topic.Unsubscribe,
+        val retryInterval: Int
+    ) : Runnable {
         override fun run() {
             val self = weakSelf.get() ?: return
             whileloop@ while (!self.isDestroyed) {
@@ -511,18 +541,24 @@ class PaperCupPhone : Service() {
                 var isSuccess = false
                 if (self.isConnectionCompletedOnce) {
                     try {
-                        self.mMQTTAndroidClient.unsubscribe(event.topic, null, object : IMqttActionListener {
-                            override fun onSuccess(asyncActionToken: IMqttToken?) {
-                                isSuccess = true
-                                Logger.d("Topics${Arrays.toString(event.topic)} Unsubscribe Successfully")
-                                gate.countDown()
-                            }
+                        self.mMQTTAndroidClient.unsubscribe(
+                            event.topic,
+                            null,
+                            object : IMqttActionListener {
+                                override fun onSuccess(asyncActionToken: IMqttToken?) {
+                                    isSuccess = true
+                                    Logger.d("Topics${Arrays.toString(event.topic)} Unsubscribe Successfully")
+                                    gate.countDown()
+                                }
 
-                            override fun onFailure(asyncActionToken: IMqttToken?, exception: Throwable?) {
-                                Logger.w("Topics${Arrays.toString(event.topic)} Unsubscribe Failed")
-                                gate.countDown()
-                            }
-                        })
+                                override fun onFailure(
+                                    asyncActionToken: IMqttToken?,
+                                    exception: Throwable?
+                                ) {
+                                    Logger.w("Topics${Arrays.toString(event.topic)} Unsubscribe Failed")
+                                    gate.countDown()
+                                }
+                            })
                     } catch (ex: MqttException) {
                         Logger.e(ex, "throwable")
                         break@whileloop
@@ -546,7 +582,11 @@ class PaperCupPhone : Service() {
                             indexs.add(index)
                         }
                         if (indexs.size != event.topic.size) {
-                            Logger.w("Unsubscribe Topics Does Not Match The Topics Of Current Subscribed ${Arrays.toString(self.mSubscriptionTopic)}, Retry After $retryInterval Second Interval")
+                            Logger.w(
+                                "Unsubscribe Topics Does Not Match The Topics Of Current Subscribed ${Arrays.toString(
+                                    self.mSubscriptionTopic
+                                )}, Retry After $retryInterval Second Interval"
+                            )
                             Thread.sleep((retryInterval * 1000).toLong())
                             continue@whileloop
                         }
@@ -557,7 +597,11 @@ class PaperCupPhone : Service() {
                         }
                         self.mSubscriptionTopic = Array(newTopic.size) { newTopic[it] }
                         self.mSubscriptionQoS = IntArray(newQoS.size) { newQoS[it] }
-                        Logger.d("Current: ${Arrays.toString(self.mSubscriptionTopic)},${Arrays.toString(self.mSubscriptionQoS)}")
+                        Logger.d(
+                            "Current: ${Arrays.toString(self.mSubscriptionTopic)},${Arrays.toString(
+                                self.mSubscriptionQoS
+                            )}"
+                        )
                         break@whileloop
                     }
                     false -> {
@@ -569,7 +613,11 @@ class PaperCupPhone : Service() {
         }
     }
 
-    private class PublishMessageRunnable(val weakSelf: WeakReference<PaperCupPhone>, val event: PaperCupPhone.Event.Topic.PublishMessage, val retryInterval: Int) : Runnable {
+    private class PublishMessageRunnable(
+        val weakSelf: WeakReference<PaperCupPhone>,
+        val event: PaperCupPhone.Event.Topic.PublishMessage,
+        val retryInterval: Int
+    ) : Runnable {
         override fun run() {
             val self = weakSelf.get() ?: return
             whileloop@ while (!self.isDestroyed) {
@@ -579,18 +627,27 @@ class PaperCupPhone : Service() {
                     try {
                         Logger.d("Publish Message <${event.message}> to <${event.topic}>")
                         // If publish message is not class of MqttMessage, it cannot store in message buffer
-                        self.mMQTTAndroidClient.publish(event.topic, event.message.toByteArray(), event.qos, event.isRetained, null, object: IMqttActionListener {
-                            override fun onSuccess(asyncActionToken: IMqttToken?) {
-                                isSuccess = true
-                                gate.countDown()
-                            }
+                        self.mMQTTAndroidClient.publish(
+                            event.topic,
+                            event.message.toByteArray(),
+                            event.qos,
+                            event.isRetained,
+                            null,
+                            object : IMqttActionListener {
+                                override fun onSuccess(asyncActionToken: IMqttToken?) {
+                                    isSuccess = true
+                                    gate.countDown()
+                                }
 
-                            override fun onFailure(asyncActionToken: IMqttToken?, exception: Throwable?) {
-                                Logger.e(exception, "Publish Message Failed")
-                                isSuccess = false
-                                gate.countDown()
-                            }
-                        })
+                                override fun onFailure(
+                                    asyncActionToken: IMqttToken?,
+                                    exception: Throwable?
+                                ) {
+                                    Logger.e(exception, "Publish Message Failed")
+                                    isSuccess = false
+                                    gate.countDown()
+                                }
+                            })
                     } catch (ex: MqttPersistenceException) {
                         Logger.e(ex, "When a problem occurs storing the message")
                         break@whileloop
@@ -598,7 +655,10 @@ class PaperCupPhone : Service() {
                         Logger.e(ex, "If value of QoS is not 0, 1 or 2")
                         break@whileloop
                     } catch (ex: MqttException) {
-                        Logger.e(ex, "For other errors encountered while publishing the message. For instance, too many messages are being processed.")
+                        Logger.e(
+                            ex,
+                            "For other errors encountered while publishing the message. For instance, too many messages are being processed."
+                        )
                         break@whileloop
                     } catch (ex: NullPointerException) {
                         Logger.v("Service Has Been Destroyed And The Above Operations Will Be Cancelled")
@@ -620,15 +680,33 @@ class PaperCupPhone : Service() {
         }
     }
 
-    data class Launcher(val client: Client, val connectOptions: ConnectOptions, val initialTopics: Topics? = null) : Serializable {
+    data class Launcher(
+        val client: Client,
+        val connectOptions: ConnectOptions,
+        val initialTopics: Topics? = null
+    ) : Serializable {
         companion object {
             const val name = "Launcher"
         }
 
         data class Client(val brokerURI: String, val id: String) : Serializable
-        data class ConnectOptions(val isAutomaticReconnect: Boolean, val isCleanSession: Boolean, val keepAliveInterval: Int, val retryInterval: Int, val account: Account? = null, val will: Will? = null) : Serializable
+        data class ConnectOptions(
+            val isAutomaticReconnect: Boolean,
+            val isCleanSession: Boolean,
+            val keepAliveInterval: Int,
+            val retryInterval: Int,
+            val account: Account? = null,
+            val will: Will? = null
+        ) : Serializable
+
         data class Account(val username: String, val password: String) : Serializable
-        data class Will(val topic: String, val message: String, val qos: Int, val retained: Boolean) : Serializable
+        data class Will(
+            val topic: String,
+            val message: String,
+            val qos: Int,
+            val retained: Boolean
+        ) : Serializable
+
         data class Topics(val topics: Array<String>, val QoSs: IntArray) : Serializable
     }
 
@@ -640,7 +718,12 @@ class PaperCupPhone : Service() {
         sealed class Topic {
             data class Subscribe(val topic: Array<String>, val qos: IntArray) : Topic()
             data class Unsubscribe(val topic: Array<String>) : Topic()
-            data class PublishMessage(val topic: String, val message: String, val qos: Int, val isRetained: Boolean) : Topic()
+            data class PublishMessage(
+                val topic: String,
+                val message: String,
+                val qos: Int,
+                val isRetained: Boolean
+            ) : Topic()
         }
     }
 }
