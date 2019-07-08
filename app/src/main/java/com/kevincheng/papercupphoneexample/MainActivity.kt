@@ -12,6 +12,7 @@ import org.greenrobot.eventbus.EventBus
 import org.greenrobot.eventbus.Subscribe
 import org.greenrobot.eventbus.ThreadMode
 import org.json.JSONException
+import org.json.JSONObject
 
 class MainActivity : AppCompatActivity() {
 
@@ -47,13 +48,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)
-    fun onMessageEvent(message: PaperCupPhone.Event.IncomingMessage) {
-        val jsonObject = message.jsonObject
-        Logger.json(jsonObject.toString())
+    fun onMessageEvent(event: PaperCupPhone.Event.IncomingMessage) {
         try {
+            val jsonObject = JSONObject(event.message)
+            Logger.json(jsonObject.toString())
             val data = jsonObject.getString("data")
             textview_helloworld.text = data
         } catch (ex: JSONException) { }
+    }
+
+    @Subscribe(threadMode = ThreadMode.MAIN)
+    fun onMessageEvent(event: PaperCupPhone.Event.ConnectionStatus) {
+        Logger.d("isConnected: ${event.isConnected}")
     }
 
     class RepeatPublishMessageRunnable(private val handler: Handler): Runnable {
