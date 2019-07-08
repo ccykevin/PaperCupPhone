@@ -195,10 +195,7 @@ class PaperCupPhone : Service() {
     }
 
     private fun sendOutConnectionStatus(status: Boolean) {
-        val jsonObject = JSONObject()
-        jsonObject.put("action", "connectionStatus")
-        jsonObject.put("status", status)
-        EventBus.getDefault().post(Event.IncomingMessage(null, jsonObject))
+        EventBus.getDefault().post(Event.ConnectionStatus(status))
     }
 
     private fun setupOfflinePublishingMessageBuffer() {
@@ -351,17 +348,12 @@ class PaperCupPhone : Service() {
         override fun messageArrived(topic: String?, message: MqttMessage?) {
             Log.d(TAG, "Connection[$clientId] Received Message: <topic: $topic, message: $message>")
             val self = weakSelf.get() ?: return
-            if (message != null && !self.isDestroyed) {
-                try {
-                    val jsonObject = JSONObject(message.toString())
-                    EventBus.getDefault().post(Event.IncomingMessage(topic, jsonObject))
-                } catch (e: JSONException) {
-                    Logger.e(e, "throwable", message)
-                }
+            if (!self.isDestroyed) {
+                val nonNullTopic = topic ?: return
+                val nonNullMessage = message?.toString() ?: return
+                EventBus.getDefault().post(Event.IncomingMessage(nonNullTopic, nonNullMessage))
             } else {
-                when {
-                    self.isDestroyed -> Logger.i("Connection[$clientId] Received Message But The Message Should Not Be Posted Because The Service Has Been Destroyed")
-                }
+                Logger.i("Connection[$clientId] Received Message But The Message Should Not Be Posted Because The Service Has Been Destroyed")
             }
         }
 
@@ -617,8 +609,9 @@ class PaperCupPhone : Service() {
     }
 
     sealed class Event {
-        data class IncomingMessage(val topic: String?, val jsonObject: JSONObject) : Event()
         object GetConnectionStatus : Event()
+        data class IncomingMessage(val topic: String, val message: String) : Event()
+        data class ConnectionStatus(val isConnected: Boolean) : Event()
 
         sealed class Topic {
             data class Subscribe(val topic: Array<String>, val qos: IntArray) : Topic()
