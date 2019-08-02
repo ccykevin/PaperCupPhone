@@ -31,14 +31,16 @@ class MainActivity : AppCompatActivity() {
         }
 
         val brokerURI = "tcp://10.0.0.91:1889"
-        val subscriptionTopics = arrayOf("wo/gq/all", "debug/")
-        val qosArray = IntArray(subscriptionTopics.size) { 1 }
         val isAutoReconnect = true
         val isCleanSession = true
         val keepAliveInternal =  30
         val retryInterval = 15
+        val account = null
+        val lwt = null
+        val initialTopics = arrayOf("wo/gq/all", "debug/")
+        val initialQoSs = IntArray(initialTopics.size) { 1 }
 
-        PaperCupPhoneAdapter.connect(this, brokerURI, "", subscriptionTopics, qosArray, isAutoReconnect, isCleanSession, keepAliveInternal, retryInterval)
+        PaperCupPhoneAdapter.connect(this, brokerURI, isAutoReconnect, isCleanSession, keepAliveInternal, retryInterval, account, lwt, initialTopics, initialQoSs)
     }
 
     override fun onDestroy() {
