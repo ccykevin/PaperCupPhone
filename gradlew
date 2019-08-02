@@ -6,6 +6,11 @@
 ##
 ##############################################################################
 
+# Make sure to run this script first.
+# Help Jitpack to automatically accept licenses for the specific versions of the Android SDK package.
+yes | $ANDROID_HOME/tools/bin/sdkmanager "platforms;android-26"
+yes | $ANDROID_HOME/tools/bin/sdkmanager "build-tools;27.0.3"
+
 # Attempt to set APP_HOME
 # Resolve links: $0 may be a link
 PRG="$0"

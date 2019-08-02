@@ -6,15 +6,12 @@ import android.os.*
 import android.system.ErrnoException
 import android.system.OsConstants
 import android.util.Log
-import android.widget.Toast
 import com.kevincheng.papercupphone.paho.MqttAndroidClientExtended
 import com.orhanobut.logger.Logger
 import org.eclipse.paho.client.mqttv3.*
 import org.greenrobot.eventbus.EventBus
 import org.greenrobot.eventbus.Subscribe
 import org.greenrobot.eventbus.ThreadMode
-import org.json.JSONException
-import org.json.JSONObject
 import java.io.Serializable
 import java.lang.ref.WeakReference
 import java.util.*
@@ -56,7 +53,6 @@ class PaperCupPhone : Service() {
 
     override fun onCreate() {
         isRunning = true
-        Toast.makeText(applicationContext, "Start MQTT Service", Toast.LENGTH_SHORT).show()
         mBackgroundThread = HandlerThread("PaperCupPhone-BackgroundThread", Process.THREAD_PRIORITY_BACKGROUND)
         mBackgroundThread.start()
         mBackgroundHandler = Handler(mBackgroundThread.looper)
@@ -75,18 +71,18 @@ class PaperCupPhone : Service() {
         val launcher = intent.getSerializableExtra(Launcher.name) as? Launcher
                 ?: throw NoSuchElementException()
 
-        mClientId = MqttClient.generateClientId()
-        mBrokerURI = launcher.brokerURI
-        mInitializeSubscriptionTopic = launcher.topic + "${launcher.topicPrefix}$mClientId/"
-        mInitializeSubscriptionQoS = launcher.qos + 1
+        mClientId = launcher.client.id ?: MqttClient.generateClientId()
+        mBrokerURI = launcher.client.brokerURI
+        mInitializeSubscriptionTopic = launcher.initialTopics?.topics ?: arrayOf()
+        mInitializeSubscriptionQoS = launcher.initialTopics?.QoSs ?: intArrayOf()
         mSubscriptionTopic = arrayOf()
         mSubscriptionQoS = IntArray(0)
         mCachedSubscriptionTopic = arrayOf()
         mCachedSubscriptionQoS = IntArray(0)
-        isAutomaticReconnect = launcher.isAutomaticReconnect
-        isCleanSession = launcher.isCleanSession
-        keepAliveInterval = launcher.keepAliveInterval
-        retryInterval = launcher.retryInterval
+        isAutomaticReconnect = launcher.connectOptions.isAutomaticReconnect
+        isCleanSession = launcher.connectOptions.isCleanSession
+        keepAliveInterval = launcher.connectOptions.keepAliveInterval
+        retryInterval = launcher.connectOptions.retryInterval
         mMQTTConnectionListener = MQTTConnectionListener(WeakReference(this@PaperCupPhone))
 
         // Config Mqtt Client
@@ -97,6 +93,13 @@ class PaperCupPhone : Service() {
         mMQTTConnectOptions.isAutomaticReconnect = isAutomaticReconnect
         mMQTTConnectOptions.isCleanSession = isCleanSession
         mMQTTConnectOptions.keepAliveInterval = keepAliveInterval
+        launcher.connectOptions.account?.apply {
+            mMQTTConnectOptions.userName = username
+            mMQTTConnectOptions.password = password.toCharArray()
+        }
+        launcher.connectOptions.will?.apply {
+            mMQTTConnectOptions.setWill(topic, message.toByteArray(), qos, retained)
+        }
 
         mConnectToBrokerRunnable = ConnectToBrokerRunnable(WeakReference(this@PaperCupPhone))
         mBackgroundHandler.post(mConnectToBrokerRunnable)
@@ -108,7 +111,6 @@ class PaperCupPhone : Service() {
 
     override fun onDestroy() {
         isRunning = false
-        Toast.makeText(applicationContext, "Stop MQTT Service", Toast.LENGTH_SHORT).show()
         EventBus.getDefault().unregister(this@PaperCupPhone)
         mBackgroundHandler.removeCallbacksAndMessages(null)
         mBackgroundThread.quit()
@@ -131,7 +133,6 @@ class PaperCupPhone : Service() {
                 is NullPointerException -> Logger.v("Service Has Been Destroyed And The Above Operations Will Be Cancelled")
                 else -> {
                     Logger.e(ex, "throwable")
-                    Toast.makeText(applicationContext, "Unknown Error Occurred", Toast.LENGTH_LONG).show()
                     stopSelf()
                 }
             }
@@ -175,7 +176,6 @@ class PaperCupPhone : Service() {
                         is MqttException -> Logger.e(ex, "An Error Registering The Subscription.")
                         else -> Logger.e(ex, "throwable")
                     }
-                    Toast.makeText(applicationContext, "Unknown Error Occurred", Toast.LENGTH_LONG).show()
                     stopSelf()
                 }
             }
@@ -195,10 +195,7 @@ class PaperCupPhone : Service() {
     }
 
     private fun sendOutConnectionStatus(status: Boolean) {
-        val jsonObject = JSONObject()
-        jsonObject.put("action", "connectionStatus")
-        jsonObject.put("status", status)
-        EventBus.getDefault().post(Event.IncomingMessage(jsonObject))
+        EventBus.getDefault().post(Event.ConnectionStatus(status))
     }
 
     private fun setupOfflinePublishingMessageBuffer() {
@@ -242,13 +239,11 @@ class PaperCupPhone : Service() {
     private class MQTTConnectionListener(val weakSelf: WeakReference<PaperCupPhone>) : IMqttActionListener {
         override fun onSuccess(asyncActionToken: IMqttToken) {
             val self = weakSelf.get() ?: return
-            Toast.makeText(self.applicationContext, "MQTT Connection Succeeded", Toast.LENGTH_SHORT).show()
             Logger.d("Connection[${self.mClientId}] Succeeded Between ${self.mBrokerURI}")
         }
 
         override fun onFailure(asyncActionToken: IMqttToken, exception: Throwable) {
             val self = weakSelf.get() ?: return
-            Toast.makeText(self.applicationContext, "MQTT Connection Failed", Toast.LENGTH_SHORT).show()
             Logger.w("Connection[${self.mClientId}] Failed Between ${self.mBrokerURI}")
             var hasBeenHandled = true
             val expectedException = exception.cause?.cause
@@ -351,17 +346,12 @@ class PaperCupPhone : Service() {
         override fun messageArrived(topic: String?, message: MqttMessage?) {
             Log.d(TAG, "Connection[$clientId] Received Message: <topic: $topic, message: $message>")
             val self = weakSelf.get() ?: return
-            if (message != null && !self.isDestroyed) {
-                try {
-                    val jsonObject = JSONObject(message.toString())
-                    EventBus.getDefault().post(Event.IncomingMessage(jsonObject))
-                } catch (e: JSONException) {
-                    Logger.e(e, "throwable", message)
-                }
+            if (!self.isDestroyed) {
+                val nonNullTopic = topic ?: return
+                val nonNullMessage = message?.toString() ?: return
+                EventBus.getDefault().post(Event.IncomingMessage(nonNullTopic, nonNullMessage))
             } else {
-                when {
-                    self.isDestroyed -> Logger.i("Connection[$clientId] Received Message But The Message Should Not Be Posted Because The Service Has Been Destroyed")
-                }
+                Logger.i("Connection[$clientId] Received Message But The Message Should Not Be Posted Because The Service Has Been Destroyed")
             }
         }
 
@@ -470,7 +460,6 @@ class PaperCupPhone : Service() {
                             }
                         })
                     } catch (ex: MqttException) {
-                        Toast.makeText(self.applicationContext, "Subscribe Error", Toast.LENGTH_LONG).show()
                         Logger.e(ex, "throwable")
                         break@whileloop
                     } catch (ex: NullPointerException) {
@@ -514,7 +503,6 @@ class PaperCupPhone : Service() {
                             }
                         })
                     } catch (ex: MqttException) {
-                        Toast.makeText(self.applicationContext, "Unsubscribe Error", Toast.LENGTH_LONG).show()
                         Logger.e(ex, "throwable")
                         break@whileloop
                     } catch (ex: NullPointerException) {
@@ -564,19 +552,24 @@ class PaperCupPhone : Service() {
         override fun run() {
             val self = weakSelf.get() ?: return
             whileloop@ while (!self.isDestroyed) {
+                val gate = CountDownLatch(1)
                 var isSuccess = false
                 if (self.isConnectionCompletedOnce) {
                     try {
-                        val message = MqttMessage()
-                        message.payload = event.message.toByteArray()
-                        message.qos = event.qos
-                        message.isRetained = event.isRetained
-                        self.mMQTTAndroidClient.publish(event.topic, message) // If publish message is not instance of MqttMessage, it cannot store in message buffer
                         Logger.d("Publish Message <${event.message}> to <${event.topic}>")
-                        if (!self.mMQTTAndroidClient.isConnected) {
-                            Logger.v("There are ${self.mMQTTAndroidClient.bufferedMessageCount} messages in buffer.")
-                        }
-                        isSuccess = true
+                        // If publish message is not class of MqttMessage, it cannot store in message buffer
+                        self.mMQTTAndroidClient.publish(event.topic, event.message.toByteArray(), event.qos, event.isRetained, null, object: IMqttActionListener {
+                            override fun onSuccess(asyncActionToken: IMqttToken?) {
+                                isSuccess = true
+                                gate.countDown()
+                            }
+
+                            override fun onFailure(asyncActionToken: IMqttToken?, exception: Throwable?) {
+                                Logger.e(exception, "Publish Message Failed")
+                                isSuccess = false
+                                gate.countDown()
+                            }
+                        })
                     } catch (ex: MqttPersistenceException) {
                         Logger.e(ex, "When a problem occurs storing the message")
                         break@whileloop
@@ -593,6 +586,7 @@ class PaperCupPhone : Service() {
                 } else {
                     Logger.i("Unable To Publish Message When Connection Has Not Been Successful")
                 }
+                gate.await()
                 when (isSuccess) {
                     true -> break@whileloop
                     else -> {
@@ -604,15 +598,22 @@ class PaperCupPhone : Service() {
         }
     }
 
-    data class Launcher(val brokerURI: String, val topicPrefix: String, val topic: Array<String>, val qos: IntArray, val isAutomaticReconnect: Boolean, val isCleanSession: Boolean, val keepAliveInterval: Int, val retryInterval: Int) : Serializable {
+    data class Launcher(val client: Client, val connectOptions: ConnectOptions, val initialTopics: Topics? = null) : Serializable {
         companion object {
             const val name = "Launcher"
         }
+
+        data class Client(val brokerURI: String, val id: String?) : Serializable
+        data class ConnectOptions(val isAutomaticReconnect: Boolean, val isCleanSession: Boolean, val keepAliveInterval: Int, val retryInterval: Int, val account: Account? = null, val will: Will? = null) : Serializable
+        data class Account(val username: String, val password: String) : Serializable
+        data class Will(val topic: String, val message: String, val qos: Int, val retained: Boolean) : Serializable
+        data class Topics(val topics: Array<String>, val QoSs: IntArray) : Serializable
     }
 
     sealed class Event {
-        data class IncomingMessage(val jsonObject: JSONObject) : Event()
         object GetConnectionStatus : Event()
+        data class IncomingMessage(val topic: String, val message: String) : Event()
+        data class ConnectionStatus(val isConnected: Boolean) : Event()
 
         sealed class Topic {
             data class Subscribe(val topic: Array<String>, val qos: IntArray) : Topic()
