@@ -6,7 +6,6 @@ import android.os.*
 import android.system.ErrnoException
 import android.system.OsConstants
 import android.util.Log
-import android.widget.Toast
 import com.kevincheng.papercupphone.paho.MqttAndroidClientExtended
 import com.orhanobut.logger.Logger
 import org.eclipse.paho.client.mqttv3.*
@@ -54,7 +53,6 @@ class PaperCupPhone : Service() {
 
     override fun onCreate() {
         isRunning = true
-        Toast.makeText(applicationContext, "Start MQTT Service", Toast.LENGTH_SHORT).show()
         mBackgroundThread = HandlerThread("PaperCupPhone-BackgroundThread", Process.THREAD_PRIORITY_BACKGROUND)
         mBackgroundThread.start()
         mBackgroundHandler = Handler(mBackgroundThread.looper)
@@ -113,7 +111,6 @@ class PaperCupPhone : Service() {
 
     override fun onDestroy() {
         isRunning = false
-        Toast.makeText(applicationContext, "Stop MQTT Service", Toast.LENGTH_SHORT).show()
         EventBus.getDefault().unregister(this@PaperCupPhone)
         mBackgroundHandler.removeCallbacksAndMessages(null)
         mBackgroundThread.quit()
@@ -136,7 +133,6 @@ class PaperCupPhone : Service() {
                 is NullPointerException -> Logger.v("Service Has Been Destroyed And The Above Operations Will Be Cancelled")
                 else -> {
                     Logger.e(ex, "throwable")
-                    Toast.makeText(applicationContext, "Unknown Error Occurred", Toast.LENGTH_LONG).show()
                     stopSelf()
                 }
             }
@@ -180,7 +176,6 @@ class PaperCupPhone : Service() {
                         is MqttException -> Logger.e(ex, "An Error Registering The Subscription.")
                         else -> Logger.e(ex, "throwable")
                     }
-                    Toast.makeText(applicationContext, "Unknown Error Occurred", Toast.LENGTH_LONG).show()
                     stopSelf()
                 }
             }
@@ -244,13 +239,11 @@ class PaperCupPhone : Service() {
     private class MQTTConnectionListener(val weakSelf: WeakReference<PaperCupPhone>) : IMqttActionListener {
         override fun onSuccess(asyncActionToken: IMqttToken) {
             val self = weakSelf.get() ?: return
-            Toast.makeText(self.applicationContext, "MQTT Connection Succeeded", Toast.LENGTH_SHORT).show()
             Logger.d("Connection[${self.mClientId}] Succeeded Between ${self.mBrokerURI}")
         }
 
         override fun onFailure(asyncActionToken: IMqttToken, exception: Throwable) {
             val self = weakSelf.get() ?: return
-            Toast.makeText(self.applicationContext, "MQTT Connection Failed", Toast.LENGTH_SHORT).show()
             Logger.w("Connection[${self.mClientId}] Failed Between ${self.mBrokerURI}")
             var hasBeenHandled = true
             val expectedException = exception.cause?.cause
@@ -467,7 +460,6 @@ class PaperCupPhone : Service() {
                             }
                         })
                     } catch (ex: MqttException) {
-                        Toast.makeText(self.applicationContext, "Subscribe Error", Toast.LENGTH_LONG).show()
                         Logger.e(ex, "throwable")
                         break@whileloop
                     } catch (ex: NullPointerException) {
@@ -511,7 +503,6 @@ class PaperCupPhone : Service() {
                             }
                         })
                     } catch (ex: MqttException) {
-                        Toast.makeText(self.applicationContext, "Unsubscribe Error", Toast.LENGTH_LONG).show()
                         Logger.e(ex, "throwable")
                         break@whileloop
                     } catch (ex: NullPointerException) {
