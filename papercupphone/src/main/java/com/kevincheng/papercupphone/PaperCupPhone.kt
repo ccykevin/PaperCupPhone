@@ -13,8 +13,6 @@ import org.eclipse.paho.client.mqttv3.*
 import org.greenrobot.eventbus.EventBus
 import org.greenrobot.eventbus.Subscribe
 import org.greenrobot.eventbus.ThreadMode
-import org.json.JSONException
-import org.json.JSONObject
 import java.io.Serializable
 import java.lang.ref.WeakReference
 import java.util.*
@@ -75,18 +73,18 @@ class PaperCupPhone : Service() {
         val launcher = intent.getSerializableExtra(Launcher.name) as? Launcher
                 ?: throw NoSuchElementException()
 
-        mClientId = MqttClient.generateClientId()
-        mBrokerURI = launcher.brokerURI
-        mInitializeSubscriptionTopic = launcher.topic + "${launcher.topicPrefix}$mClientId/"
-        mInitializeSubscriptionQoS = launcher.qos + 1
+        mClientId = launcher.client.id ?: MqttClient.generateClientId()
+        mBrokerURI = launcher.client.brokerURI
+        mInitializeSubscriptionTopic = launcher.initialTopics?.topics ?: arrayOf()
+        mInitializeSubscriptionQoS = launcher.initialTopics?.QoSs ?: intArrayOf()
         mSubscriptionTopic = arrayOf()
         mSubscriptionQoS = IntArray(0)
         mCachedSubscriptionTopic = arrayOf()
         mCachedSubscriptionQoS = IntArray(0)
-        isAutomaticReconnect = launcher.isAutomaticReconnect
-        isCleanSession = launcher.isCleanSession
-        keepAliveInterval = launcher.keepAliveInterval
-        retryInterval = launcher.retryInterval
+        isAutomaticReconnect = launcher.connectOptions.isAutomaticReconnect
+        isCleanSession = launcher.connectOptions.isCleanSession
+        keepAliveInterval = launcher.connectOptions.keepAliveInterval
+        retryInterval = launcher.connectOptions.retryInterval
         mMQTTConnectionListener = MQTTConnectionListener(WeakReference(this@PaperCupPhone))
 
         // Config Mqtt Client
@@ -97,6 +95,13 @@ class PaperCupPhone : Service() {
         mMQTTConnectOptions.isAutomaticReconnect = isAutomaticReconnect
         mMQTTConnectOptions.isCleanSession = isCleanSession
         mMQTTConnectOptions.keepAliveInterval = keepAliveInterval
+        launcher.connectOptions.account?.apply {
+            mMQTTConnectOptions.userName = username
+            mMQTTConnectOptions.password = password.toCharArray()
+        }
+        launcher.connectOptions.will?.apply {
+            mMQTTConnectOptions.setWill(topic, message.toByteArray(), qos, retained)
+        }
 
         mConnectToBrokerRunnable = ConnectToBrokerRunnable(WeakReference(this@PaperCupPhone))
         mBackgroundHandler.post(mConnectToBrokerRunnable)
@@ -602,10 +607,16 @@ class PaperCupPhone : Service() {
         }
     }
 
-    data class Launcher(val brokerURI: String, val topicPrefix: String, val topic: Array<String>, val qos: IntArray, val isAutomaticReconnect: Boolean, val isCleanSession: Boolean, val keepAliveInterval: Int, val retryInterval: Int) : Serializable {
+    data class Launcher(val client: Client, val connectOptions: ConnectOptions, val initialTopics: Topics? = null) : Serializable {
         companion object {
             const val name = "Launcher"
         }
+
+        data class Client(val brokerURI: String, val id: String?) : Serializable
+        data class ConnectOptions(val isAutomaticReconnect: Boolean, val isCleanSession: Boolean, val keepAliveInterval: Int, val retryInterval: Int, val account: Account? = null, val will: Will? = null) : Serializable
+        data class Account(val username: String, val password: String) : Serializable
+        data class Will(val topic: String, val message: String, val qos: Int, val retained: Boolean) : Serializable
+        data class Topics(val topics: Array<String>, val QoSs: IntArray) : Serializable
     }
 
     sealed class Event {
