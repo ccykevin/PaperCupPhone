@@ -146,7 +146,10 @@ class PaperCupPhone : Service() {
     }
 
     private fun initializeSubscription() {
-        subscribeTopic(mInitializeSubscriptionTopic, mInitializeSubscriptionQoS, InitializeSubscriptionListener(WeakReference(this@PaperCupPhone), CountDownLatch(1)))
+        when(mInitializeSubscriptionTopic.isNotEmpty()) {
+            true -> subscribeTopic(mInitializeSubscriptionTopic, mInitializeSubscriptionQoS, InitializeSubscriptionListener(WeakReference(this@PaperCupPhone), CountDownLatch(1)))
+            false -> mCallback.isInitialized = true
+        }
     }
 
     private fun subscribeTopic(topic: Array<String>, qos: IntArray, listener: IMqttActionListener?) {
@@ -308,8 +311,10 @@ class PaperCupPhone : Service() {
                                 return@post
                             }
                             if (!isCleanSession) return@post
-                            // If Clean Session is true, we need to re-subscribe
-                            self.subscribeTopic(self.mCachedSubscriptionTopic, self.mCachedSubscriptionQoS, null)
+                            // If Clean Session is true and cached topics is not empty, we need to re-subscribe
+                            when {
+                                self.mCachedSubscriptionTopic.isNotEmpty() -> self.subscribeTopic(self.mCachedSubscriptionTopic, self.mCachedSubscriptionQoS, null)
+                            }
                         }
                         false -> self.initializeSubscription()
                     }
