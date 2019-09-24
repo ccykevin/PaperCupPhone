@@ -71,7 +71,7 @@ class PaperCupPhone : Service() {
         val launcher = intent.getSerializableExtra(Launcher.name) as? Launcher
                 ?: throw NoSuchElementException()
 
-        mClientId = launcher.client.id ?: MqttClient.generateClientId()
+        mClientId = launcher.client.id
         mBrokerURI = launcher.client.brokerURI
         mInitializeSubscriptionTopic = launcher.initialTopics?.topics ?: arrayOf()
         mInitializeSubscriptionQoS = launcher.initialTopics?.QoSs ?: intArrayOf()
@@ -608,7 +608,7 @@ class PaperCupPhone : Service() {
             const val name = "Launcher"
         }
 
-        data class Client(val brokerURI: String, val id: String?) : Serializable
+        data class Client(val brokerURI: String, val id: String) : Serializable
         data class ConnectOptions(val isAutomaticReconnect: Boolean, val isCleanSession: Boolean, val keepAliveInterval: Int, val retryInterval: Int, val account: Account? = null, val will: Will? = null) : Serializable
         data class Account(val username: String, val password: String) : Serializable
         data class Will(val topic: String, val message: String, val qos: Int, val retained: Boolean) : Serializable

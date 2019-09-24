@@ -3,11 +3,16 @@ package com.kevincheng.papercupphone
 import android.content.Context
 import android.content.Intent
 import com.orhanobut.logger.Logger
+import org.eclipse.paho.client.mqttv3.MqttClient
 import org.greenrobot.eventbus.EventBus
 
 class PaperCupPhoneAdapter {
     companion object {
-        fun connect(context: Context, brokerURI: String, isAutomaticReconnect: Boolean, isCleanSession: Boolean, keepAliveInterval: Int, retryInterval: Int, account: PaperCupPhone.Launcher.Account? = null, will: PaperCupPhone.Launcher.Will? = null, initialTopics: Array<String>? = null, initialQoSs: IntArray? = null) {
+        fun generateClientId(): String {
+            return MqttClient.generateClientId()
+        }
+
+        fun connect(context: Context, brokerURI: String, clientId: String, isAutomaticReconnect: Boolean, isCleanSession: Boolean, keepAliveInterval: Int, retryInterval: Int, account: PaperCupPhone.Launcher.Account? = null, will: PaperCupPhone.Launcher.Will? = null, initialTopics: Array<String>? = null, initialQoSs: IntArray? = null) {
             // If already running, it will restart service
             disconnect(context)
             val intent = Intent(context, PaperCupPhone::class.java)
@@ -15,7 +20,7 @@ class PaperCupPhoneAdapter {
                 initialTopics != null && initialQoSs != null && initialTopics.size == initialQoSs.size -> PaperCupPhone.Launcher.Topics(initialTopics, initialQoSs)
                 else -> null
             }
-            val launcher = PaperCupPhone.Launcher(PaperCupPhone.Launcher.Client(brokerURI, null), PaperCupPhone.Launcher.ConnectOptions(isAutomaticReconnect, isCleanSession, keepAliveInterval, retryInterval, account, will), topics)
+            val launcher = PaperCupPhone.Launcher(PaperCupPhone.Launcher.Client(brokerURI, clientId), PaperCupPhone.Launcher.ConnectOptions(isAutomaticReconnect, isCleanSession, keepAliveInterval, retryInterval, account, will), topics)
             intent.putExtra(PaperCupPhone.Launcher.name, launcher)
             context.startService(intent)
         }
