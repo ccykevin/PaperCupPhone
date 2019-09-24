@@ -40,7 +40,7 @@ class MainActivity : AppCompatActivity() {
         val initialTopics = arrayOf("wo/gq/all", "debug/")
         val initialQoSs = IntArray(initialTopics.size) { 1 }
 
-        PaperCupPhoneAdapter.connect(this, brokerURI, isAutoReconnect, isCleanSession, keepAliveInternal, retryInterval, account, lwt, initialTopics, initialQoSs)
+        PaperCupPhoneAdapter.connect(this, brokerURI, PaperCupPhoneAdapter.generateClientId(), isAutoReconnect, isCleanSession, keepAliveInternal, retryInterval, account, lwt, initialTopics, initialQoSs)
     }
 
     override fun onDestroy() {
