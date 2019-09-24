@@ -590,6 +590,7 @@ class PaperCupPhone : Service() {
                     }
                 } else {
                     Logger.i("Unable To Publish Message When Connection Has Not Been Successful")
+                    gate.countDown()
                 }
                 gate.await()
                 when (isSuccess) {
