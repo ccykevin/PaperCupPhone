@@ -249,45 +249,58 @@ class PaperCupPhone : Service() {
             val self = weakSelf.get() ?: return
             Logger.w("Connection[${self.mClientId}] Failed Between ${self.mBrokerURI}")
             var hasBeenHandled = true
-            val expectedException = exception.cause?.cause
-            if (expectedException != null) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                    val errnoException = expectedException as? ErrnoException
-                    if (errnoException != null) {
-                        when (errnoException.errno) {
-                            OsConstants.ENETUNREACH -> Logger.w("There Is No Internet Connection, But It Should Automatically Reconnect When The Internet Is Available")
-                            else -> {
-                                when (errnoException.errno) {
-                                    OsConstants.ECONNREFUSED -> Logger.w("The Host Is Online But Connection to Broker Failed")
-                                    OsConstants.EHOSTUNREACH -> Logger.w("The Host Is Offline")
-                                    else -> hasBeenHandled = false
-                                }
-                                self.reconnectToBroker()
-                            }
+            when(exception) {
+                is MqttException -> {
+                    when {
+                        exception.reasonCode == 0 && exception.cause == null -> self.reconnectToBroker()
+                        else -> {
+                            hasBeenHandled = false
+                            Logger.d("underlying reason@${exception.reasonCode} cause@${exception.cause}")
                         }
-                    } else {
-                        hasBeenHandled = false
                     }
-                } else {
-                    val message = expectedException.message
-                    if (message != null) {
-                        when {
-                            message.contains("ENETUNREACH") -> Logger.w("There Is No Internet Connection, But It Should Automatically Reconnect When The Internet Is Available")
-                            else -> {
-                                when {
-                                    message.contains("ECONNREFUSED") -> Logger.w("The Host Is Online But Connection to Broker Failed")
-                                    message.contains("EHOSTUNREACH") -> Logger.w("The Host Is Offline")
-                                    else -> hasBeenHandled = false
+                }
+                else -> {
+                    val expectedException = exception.cause?.cause
+                    if (expectedException != null) {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                            val errnoException = expectedException as? ErrnoException
+                            if (errnoException != null) {
+                                when (errnoException.errno) {
+                                    OsConstants.ENETUNREACH -> Logger.w("There Is No Internet Connection, But It Should Automatically Reconnect When The Internet Is Available")
+                                    else -> {
+                                        when (errnoException.errno) {
+                                            OsConstants.ECONNREFUSED -> Logger.w("The Host Is Online But Connection to Broker Failed")
+                                            OsConstants.EHOSTUNREACH -> Logger.w("The Host Is Offline")
+                                            else -> hasBeenHandled = false
+                                        }
+                                        self.reconnectToBroker()
+                                    }
                                 }
-                                self.reconnectToBroker()
+                            } else {
+                                hasBeenHandled = false
+                            }
+                        } else {
+                            val message = expectedException.message
+                            if (message != null) {
+                                when {
+                                    message.contains("ENETUNREACH") -> Logger.w("There Is No Internet Connection, But It Should Automatically Reconnect When The Internet Is Available")
+                                    else -> {
+                                        when {
+                                            message.contains("ECONNREFUSED") -> Logger.w("The Host Is Online But Connection to Broker Failed")
+                                            message.contains("EHOSTUNREACH") -> Logger.w("The Host Is Offline")
+                                            else -> hasBeenHandled = false
+                                        }
+                                        self.reconnectToBroker()
+                                    }
+                                }
+                            } else {
+                                hasBeenHandled = false
                             }
                         }
                     } else {
                         hasBeenHandled = false
                     }
                 }
-            } else {
-                hasBeenHandled = false
             }
             if (!hasBeenHandled) Logger.e(exception, "Unexpected Throwable")
         }
