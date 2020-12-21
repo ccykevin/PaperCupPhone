@@ -14,10 +14,11 @@ import org.greenrobot.eventbus.Subscribe
 import org.greenrobot.eventbus.ThreadMode
 import java.io.Serializable
 import java.lang.ref.WeakReference
+import java.net.NoRouteToHostException
+import java.net.SocketException
 import java.util.*
 import java.util.concurrent.CountDownLatch
 import kotlin.collections.ArrayList
-import org.eclipse.paho.client.mqttv3.MqttMessage
 
 class PaperCupPhone : Service() {
     companion object {
@@ -252,7 +253,9 @@ class PaperCupPhone : Service() {
             when(exception) {
                 is MqttException -> {
                     when {
+                        exception.reasonCode == 32103 -> self.reconnectToBroker()
                         exception.reasonCode == 0 && exception.cause == null -> self.reconnectToBroker()
+                        exception.reasonCode == 0 && exception.cause is NoRouteToHostException -> self.reconnectToBroker()
                         else -> {
                             hasBeenHandled = false
                             Logger.d("underlying reason@${exception.reasonCode} cause@${exception.cause}")
