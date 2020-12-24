@@ -44,6 +44,7 @@ class PaperCupPhone : Service() {
     private lateinit var mCachedSubscriptionQoS: IntArray
     private lateinit var mConnectToBrokerRunnable: ConnectToBrokerRunnable
 
+    private var startId = -1
     private var isAutomaticReconnect: Boolean = false
     private var isCleanSession: Boolean = true
     private var keepAliveInterval: Int = 60
@@ -63,6 +64,7 @@ class PaperCupPhone : Service() {
         mCommunicationThread.start()
         mCommunicationHandler = Handler(mCommunicationThread.looper)
         EventBus.getDefault().register(this@PaperCupPhone)
+        Logger.t("PAPER_CUP_PHONE").i("Service@$this onCreate")
     }
 
     override fun onBind(intent: Intent?): IBinder? {
@@ -70,52 +72,58 @@ class PaperCupPhone : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent == null) throw NoSuchElementException()
-        val launcher = intent.getSerializableExtra(Launcher.name) as? Launcher
-            ?: throw NoSuchElementException()
+        this.startId = startId
+        Logger.t("PAPER_CUP_PHONE").i("Service@$startId onStartCommand")
 
-        mClientId = launcher.client.id
-        mBrokerURI = launcher.client.brokerURI
-        mInitializeSubscriptionTopic = launcher.initialTopics?.topics ?: arrayOf()
-        mInitializeSubscriptionQoS = launcher.initialTopics?.QoSs ?: intArrayOf()
-        mSubscriptionTopic = arrayOf()
-        mSubscriptionQoS = IntArray(0)
-        mCachedSubscriptionTopic = arrayOf()
-        mCachedSubscriptionQoS = IntArray(0)
-        isAutomaticReconnect = launcher.connectOptions.isAutomaticReconnect
-        isCleanSession = launcher.connectOptions.isCleanSession
-        keepAliveInterval = launcher.connectOptions.keepAliveInterval
-        retryInterval = launcher.connectOptions.retryInterval
-        mMQTTConnectionListener = MQTTConnectionListener(WeakReference(this@PaperCupPhone))
+        val launcher = intent?.getSerializableExtra(Launcher.name) as? Launcher
 
-        // Config Mqtt Client
-        mMQTTAndroidClient = MqttAndroidClientExtended(applicationContext, mBrokerURI, mClientId)
-        mCallback = MQTTCallback(
-            false,
-            isCleanSession,
-            WeakReference(this@PaperCupPhone),
-            WeakReference(mMQTTAndroidClient),
-            mClientId
-        )
-        mMQTTAndroidClient.setCallback(mCallback)
-        mMQTTConnectOptions = MqttConnectOptions()
-        mMQTTConnectOptions.isAutomaticReconnect = false
-        mMQTTConnectOptions.isCleanSession = isCleanSession
-        mMQTTConnectOptions.keepAliveInterval = keepAliveInterval
-        launcher.connectOptions.account?.apply {
-            mMQTTConnectOptions.userName = username
-            mMQTTConnectOptions.password = password.toCharArray()
+        if (launcher != null) {
+            mClientId = launcher.client.id
+            mBrokerURI = launcher.client.brokerURI
+            mInitializeSubscriptionTopic = launcher.initialTopics?.topics ?: arrayOf()
+            mInitializeSubscriptionQoS = launcher.initialTopics?.QoSs ?: intArrayOf()
+            mSubscriptionTopic = arrayOf()
+            mSubscriptionQoS = IntArray(0)
+            mCachedSubscriptionTopic = arrayOf()
+            mCachedSubscriptionQoS = IntArray(0)
+            isAutomaticReconnect = launcher.connectOptions.isAutomaticReconnect
+            isCleanSession = launcher.connectOptions.isCleanSession
+            keepAliveInterval = launcher.connectOptions.keepAliveInterval
+            retryInterval = launcher.connectOptions.retryInterval
+            mMQTTConnectionListener = MQTTConnectionListener(WeakReference(this@PaperCupPhone))
+
+            // Config Mqtt Client
+            mMQTTAndroidClient =
+                MqttAndroidClientExtended(applicationContext, mBrokerURI, mClientId)
+            mCallback = MQTTCallback(
+                false,
+                isCleanSession,
+                WeakReference(this@PaperCupPhone),
+                WeakReference(mMQTTAndroidClient),
+                mClientId
+            )
+            mMQTTAndroidClient.setCallback(mCallback)
+            mMQTTConnectOptions = MqttConnectOptions()
+            mMQTTConnectOptions.isAutomaticReconnect = false
+            mMQTTConnectOptions.isCleanSession = isCleanSession
+            mMQTTConnectOptions.keepAliveInterval = keepAliveInterval
+            launcher.connectOptions.account?.apply {
+                mMQTTConnectOptions.userName = username
+                mMQTTConnectOptions.password = password.toCharArray()
+            }
+            launcher.connectOptions.will?.apply {
+                mMQTTConnectOptions.setWill(topic, message.toByteArray(), qos, retained)
+            }
+
+            mConnectToBrokerRunnable = ConnectToBrokerRunnable(WeakReference(this@PaperCupPhone))
+            mBackgroundHandler.post(mConnectToBrokerRunnable)
+
+            Logger.t("PAPER_CUP_PHONE").i("Service@$startId Has Started\nClient Id: $mClientId")
+        } else {
+            stopSelf()
         }
-        launcher.connectOptions.will?.apply {
-            mMQTTConnectOptions.setWill(topic, message.toByteArray(), qos, retained)
-        }
 
-        mConnectToBrokerRunnable = ConnectToBrokerRunnable(WeakReference(this@PaperCupPhone))
-        mBackgroundHandler.post(mConnectToBrokerRunnable)
-
-        Logger.t("PAPER_CUP_PHONE").i("Service Has Started\nClient Id: $mClientId")
-
-        return Service.START_NOT_STICKY
+        return START_REDELIVER_INTENT
     }
 
     override fun onDestroy() {
@@ -129,17 +137,19 @@ class PaperCupPhone : Service() {
         mMQTTAndroidClient.disconnectImmediately()
         super.onDestroy()
         isDestroyed = true
-        Logger.t("PAPER_CUP_PHONE").i("Service Has Been Destroyed\nClient Id: $mClientId")
+        Logger.t("PAPER_CUP_PHONE").i("Service@$startId Has Been Destroyed\nClient Id: $mClientId")
         sendOutConnectionStatus(false) // Notify that the connection has been disconnected
     }
 
     private fun connectToBroker() {
         try {
-            Logger.t("PAPER_CUP_PHONE").i("Start Connecting To The Broker: $mBrokerURI, Client Id: $mClientId")
+            Logger.t("PAPER_CUP_PHONE")
+                .i("Start Connecting To The Broker: $mBrokerURI, Client Id: $mClientId")
             mMQTTAndroidClient.connect(mMQTTConnectOptions, null, mMQTTConnectionListener)
         } catch (ex: Exception) {
             when (ex) {
-                is NullPointerException -> Logger.t("PAPER_CUP_PHONE").v("Service Has Been Destroyed And The Above Operations Will Be Cancelled")
+                is NullPointerException -> Logger.t("PAPER_CUP_PHONE")
+                    .v("Service@$startId Has Been Destroyed And The Above Operations Will Be Cancelled")
                 else -> {
                     Logger.t("PAPER_CUP_PHONE").e(ex, "throwable")
                     stopSelf()
@@ -190,14 +200,16 @@ class PaperCupPhone : Service() {
             gate.await()
         } catch (ex: Exception) {
             when (ex) {
-                is NullPointerException -> Logger.t("PAPER_CUP_PHONE").v("Service Has Been Destroyed And The Above Operations Will Be Cancelled")
+                is NullPointerException -> Logger.t("PAPER_CUP_PHONE")
+                    .v("Service@$startId Has Been Destroyed And The Above Operations Will Be Cancelled")
                 else -> {
                     when (ex) {
                         is IllegalArgumentException -> Logger.t("PAPER_CUP_PHONE").e(
                             ex,
                             "Two Supplied Arrays Are Not The Same Size"
                         )
-                        is MqttException -> Logger.t("PAPER_CUP_PHONE").e(ex, "An Error Registering The Subscription.")
+                        is MqttException -> Logger.t("PAPER_CUP_PHONE")
+                            .e(ex, "An Error Registering The Subscription.")
                         else -> Logger.t("PAPER_CUP_PHONE").e(ex, "throwable")
                     }
                     stopSelf()
@@ -234,7 +246,8 @@ class PaperCupPhone : Service() {
             didSetupDisconnectedBufferOptions = true
         } catch (ex: Exception) {
             when (ex) {
-                is NullPointerException -> Logger.t("PAPER_CUP_PHONE").v("Service Has Been Destroyed And The Above Operations Will Be Cancelled")
+                is NullPointerException -> Logger.t("PAPER_CUP_PHONE")
+                    .v("Service@$startId Has Been Destroyed And The Above Operations Will Be Cancelled")
                 else -> Logger.t("PAPER_CUP_PHONE").e(ex, "throwable")
             }
         }
@@ -282,12 +295,14 @@ class PaperCupPhone : Service() {
         IMqttActionListener {
         override fun onSuccess(asyncActionToken: IMqttToken) {
             val self = weakSelf.get() ?: return
-            Logger.t("PAPER_CUP_PHONE").d("Connection[${self.mClientId}] Succeeded Between ${self.mBrokerURI}")
+            Logger.t("PAPER_CUP_PHONE")
+                .d("Connection[${self.mClientId}] Succeeded Between ${self.mBrokerURI}")
         }
 
         override fun onFailure(asyncActionToken: IMqttToken, exception: Throwable) {
             val self = weakSelf.get() ?: return
-            Logger.t("PAPER_CUP_PHONE").w("Connection[${self.mClientId}] Failed Between ${self.mBrokerURI}")
+            Logger.t("PAPER_CUP_PHONE")
+                .w("Connection[${self.mClientId}] Failed Between ${self.mBrokerURI}")
 
             Logger.t("PAPER_CUP_PHONE").e(exception, "Unexpected Throwable")
 
@@ -328,7 +343,8 @@ class PaperCupPhone : Service() {
                     }
                 }
             } else {
-                Logger.t("PAPER_CUP_PHONE").w("Connection[$clientId] Completed But It Should Disconnected Immediately Because The Service Has Been Destroyed")
+                Logger.t("PAPER_CUP_PHONE")
+                    .w("Connection[$clientId] Completed But It Should Disconnected Immediately Because The Service Has Been Destroyed")
                 when {
                     self == null -> {
                         val client = weakClient.get() ?: return
@@ -366,7 +382,8 @@ class PaperCupPhone : Service() {
                 val nonNullMessage = message?.toString() ?: return
                 EventBus.getDefault().post(Event.IncomingMessage(nonNullTopic, nonNullMessage))
             } else {
-                Logger.t("PAPER_CUP_PHONE").i("Connection[$clientId] Received Message But The Message Should Not Be Posted Because The Service Has Been Destroyed")
+                Logger.t("PAPER_CUP_PHONE")
+                    .i("Connection[$clientId] Received Message But The Message Should Not Be Posted Because The Service Has Been Destroyed")
             }
         }
 
@@ -397,7 +414,8 @@ class PaperCupPhone : Service() {
 
         override fun onFailure(asyncActionToken: IMqttToken?, exception: Throwable?) {
             val self = weakSelf.get() ?: return
-            Logger.t("PAPER_CUP_PHONE").w("Topics${Arrays.toString(self.mInitializeSubscriptionTopic)} Subscription Failed")
+            Logger.t("PAPER_CUP_PHONE")
+                .w("Topics${Arrays.toString(self.mInitializeSubscriptionTopic)} Subscription Failed")
             gate.countDown()
         }
     }
@@ -462,7 +480,8 @@ class PaperCupPhone : Service() {
                 )
             }
             if (validSubscriptionIndexArray.size == 0) {
-                Logger.t("PAPER_CUP_PHONE").w("Subscribe Duplicate Topics: ${Arrays.toString(event.topic)}")
+                Logger.t("PAPER_CUP_PHONE")
+                    .w("Subscribe Duplicate Topics: ${Arrays.toString(event.topic)}")
                 return
             }
 
@@ -502,7 +521,8 @@ class PaperCupPhone : Service() {
                                     asyncActionToken: IMqttToken?,
                                     exception: Throwable?
                                 ) {
-                                    Logger.t("PAPER_CUP_PHONE").w("Topics${Arrays.toString(event.topic)} Subscription Failed")
+                                    Logger.t("PAPER_CUP_PHONE")
+                                        .w("Topics${Arrays.toString(event.topic)} Subscription Failed")
                                     gate.countDown()
                                 }
                             })
@@ -510,11 +530,13 @@ class PaperCupPhone : Service() {
                         Logger.t("PAPER_CUP_PHONE").e(ex, "throwable")
                         break@whileloop
                     } catch (ex: NullPointerException) {
-                        Logger.t("PAPER_CUP_PHONE").v("Service Has Been Destroyed And The Above Operations Will Be Cancelled")
+                        Logger.t("PAPER_CUP_PHONE")
+                            .v("Service Has Been Destroyed And The Above Operations Will Be Cancelled")
                         break@whileloop
                     }
                 } else {
-                    Logger.t("PAPER_CUP_PHONE").i("Unable To Subscribe To Topics When Connection Has Not Been Successful")
+                    Logger.t("PAPER_CUP_PHONE")
+                        .i("Unable To Subscribe To Topics When Connection Has Not Been Successful")
                     gate.countDown()
                 }
                 gate.await()
@@ -547,7 +569,8 @@ class PaperCupPhone : Service() {
                             object : IMqttActionListener {
                                 override fun onSuccess(asyncActionToken: IMqttToken?) {
                                     isSuccess = true
-                                    Logger.t("PAPER_CUP_PHONE").d("Topics${Arrays.toString(event.topic)} Unsubscribe Successfully")
+                                    Logger.t("PAPER_CUP_PHONE")
+                                        .d("Topics${Arrays.toString(event.topic)} Unsubscribe Successfully")
                                     gate.countDown()
                                 }
 
@@ -555,7 +578,8 @@ class PaperCupPhone : Service() {
                                     asyncActionToken: IMqttToken?,
                                     exception: Throwable?
                                 ) {
-                                    Logger.t("PAPER_CUP_PHONE").w("Topics${Arrays.toString(event.topic)} Unsubscribe Failed")
+                                    Logger.t("PAPER_CUP_PHONE")
+                                        .w("Topics${Arrays.toString(event.topic)} Unsubscribe Failed")
                                     gate.countDown()
                                 }
                             })
@@ -563,11 +587,13 @@ class PaperCupPhone : Service() {
                         Logger.t("PAPER_CUP_PHONE").e(ex, "throwable")
                         break@whileloop
                     } catch (ex: NullPointerException) {
-                        Logger.t("PAPER_CUP_PHONE").v("Service Has Been Destroyed And The Above Operations Will Be Cancelled")
+                        Logger.t("PAPER_CUP_PHONE")
+                            .v("Service Has Been Destroyed And The Above Operations Will Be Cancelled")
                         break@whileloop
                     }
                 } else {
-                    Logger.t("PAPER_CUP_PHONE").i("Unable To Unsubscribe To Topics When Connection Has Not Been Successful")
+                    Logger.t("PAPER_CUP_PHONE")
+                        .i("Unable To Unsubscribe To Topics When Connection Has Not Been Successful")
                     gate.countDown()
                 }
                 gate.await()
@@ -625,7 +651,8 @@ class PaperCupPhone : Service() {
                 var isSuccess = false
                 if (self.isConnectionCompletedOnce) {
                     try {
-                        Logger.t("PAPER_CUP_PHONE").d("Publish Message <${event.message}> to <${event.topic}>")
+                        Logger.t("PAPER_CUP_PHONE")
+                            .d("Publish Message <${event.message}> to <${event.topic}>")
                         // If publish message is not class of MqttMessage, it cannot store in message buffer
                         self.mMQTTAndroidClient.publish(
                             event.topic,
@@ -643,13 +670,15 @@ class PaperCupPhone : Service() {
                                     asyncActionToken: IMqttToken?,
                                     exception: Throwable?
                                 ) {
-                                    Logger.t("PAPER_CUP_PHONE").e(exception, "Publish Message Failed")
+                                    Logger.t("PAPER_CUP_PHONE")
+                                        .e(exception, "Publish Message Failed")
                                     isSuccess = false
                                     gate.countDown()
                                 }
                             })
                     } catch (ex: MqttPersistenceException) {
-                        Logger.t("PAPER_CUP_PHONE").e(ex, "When a problem occurs storing the message")
+                        Logger.t("PAPER_CUP_PHONE")
+                            .e(ex, "When a problem occurs storing the message")
                         break@whileloop
                     } catch (ex: IllegalArgumentException) {
                         Logger.t("PAPER_CUP_PHONE").e(ex, "If value of QoS is not 0, 1 or 2")
@@ -661,11 +690,13 @@ class PaperCupPhone : Service() {
                         )
                         break@whileloop
                     } catch (ex: NullPointerException) {
-                        Logger.t("PAPER_CUP_PHONE").v("Service Has Been Destroyed And The Above Operations Will Be Cancelled")
+                        Logger.t("PAPER_CUP_PHONE")
+                            .v("Service Has Been Destroyed And The Above Operations Will Be Cancelled")
                         break@whileloop
                     }
                 } else {
-                    Logger.t("PAPER_CUP_PHONE").i("Unable To Publish Message When Connection Has Not Been Successful")
+                    Logger.t("PAPER_CUP_PHONE")
+                        .i("Unable To Publish Message When Connection Has Not Been Successful")
                     gate.countDown()
                 }
                 gate.await()
