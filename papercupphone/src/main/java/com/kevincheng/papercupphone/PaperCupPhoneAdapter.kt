@@ -36,7 +36,7 @@ class PaperCupPhoneAdapter {
                     true
                 }
                 else -> {
-                    Logger.e("Is Not Running Yet")
+                    Logger.t("PAPER_CUP_PHONE").e("Is Not Running Yet")
                     false
                 }
             }
@@ -54,7 +54,7 @@ class PaperCupPhoneAdapter {
                     true
                 }
                 else -> {
-                    Logger.e("Is Not Running Yet")
+                    Logger.t("PAPER_CUP_PHONE").e("Is Not Running Yet")
                     false
                 }
             }
@@ -71,7 +71,7 @@ class PaperCupPhoneAdapter {
                     true
                 }
                 else -> {
-                    Logger.e("Is Not Running Yet")
+                    Logger.t("PAPER_CUP_PHONE").e("Is Not Running Yet")
                     false
                 }
             }
@@ -84,7 +84,7 @@ class PaperCupPhoneAdapter {
                     true
                 }
                 else -> {
-                    Logger.e("Is Not Running Yet")
+                    Logger.t("PAPER_CUP_PHONE").e("Is Not Running Yet")
                     false
                 }
             }
