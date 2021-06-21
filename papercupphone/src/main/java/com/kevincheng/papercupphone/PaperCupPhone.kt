@@ -1,8 +1,13 @@
 package com.kevincheng.papercupphone
 
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.os.*
+import android.support.v4.app.NotificationCompat
 import android.system.ErrnoException
 import android.system.OsConstants
 import android.util.Log
@@ -64,6 +69,7 @@ class PaperCupPhone : Service() {
         mCommunicationThread.start()
         mCommunicationHandler = Handler(mCommunicationThread.looper)
         EventBus.getDefault().register(this@PaperCupPhone)
+        startForeground()
         Logger.t("PAPER_CUP_PHONE").i("Service@$this onCreate")
     }
 
@@ -135,10 +141,46 @@ class PaperCupPhone : Service() {
         mCommunicationThread.quit()
 
         mMQTTAndroidClient.disconnectImmediately()
+        stopForeground(true)
         super.onDestroy()
         isDestroyed = true
         Logger.t("PAPER_CUP_PHONE").i("Service@$startId Has Been Destroyed\nClient Id: $mClientId")
         sendOutConnectionStatus(false) // Notify that the connection has been disconnected
+    }
+
+    private fun startForeground() {
+        val channelId =
+            when {
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.O -> {
+                    val channelId = "com.kevincheng.papercupphone"
+                    val channelName = "PaperCupPhone Service"
+                    val channel =
+                        NotificationChannel(
+                            channelId,
+                            channelName,
+                            NotificationManager.IMPORTANCE_NONE
+                        )
+                    channel.enableLights(false)
+                    channel.enableVibration(false)
+                    channel.lockscreenVisibility = Notification.VISIBILITY_SECRET
+                    val service =
+                        getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                    service.createNotificationChannel(channel)
+                    channelId
+                }
+                else -> ""
+            }
+        val notificationBuilder = NotificationCompat.Builder(this, channelId)
+            .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_MIN)
+            .setSmallIcon(R.drawable.ic_connect)
+            .setContentTitle("PaperCupPhone Service is running")
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            notificationBuilder.setCategory(Notification.CATEGORY_SERVICE)
+        }
+
+        startForeground(8888, notificationBuilder.build())
     }
 
     private fun connectToBroker() {
