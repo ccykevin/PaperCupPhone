@@ -4,7 +4,7 @@ import android.app.Application
 import android.content.Context
 import android.os.Build
 import android.os.HandlerThread
-import android.support.multidex.MultiDex
+import androidx.multidex.MultiDex
 import com.orhanobut.logger.AndroidLogAdapter
 import com.orhanobut.logger.Logger
 

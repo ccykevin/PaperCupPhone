@@ -7,7 +7,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.os.*
-import android.support.v4.app.NotificationCompat
+import androidx.core.app.NotificationCompat
 import android.system.ErrnoException
 import android.system.OsConstants
 import android.util.Log
