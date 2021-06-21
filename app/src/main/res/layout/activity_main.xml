@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<android.support.constraint.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     tools:context=".MainActivity">
 
-    <TextView
+    <androidx.appcompat.widget.AppCompatTextView
         android:id="@+id/textview_helloworld"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -16,7 +16,7 @@
         app:layout_constraintTop_toTopOf="parent"
         android:layout_marginTop="16dp"/>
 
-    <Button
+    <androidx.appcompat.widget.AppCompatButton
         android:id="@+id/button_subscribe"
         android:layout_width="wrap_content"
         android:layout_height="44dp"
@@ -26,7 +26,7 @@
         app:layout_constraintRight_toRightOf="parent"
         android:layout_marginTop="16dp"/>
 
-    <Button
+    <androidx.appcompat.widget.AppCompatButton
         android:id="@+id/button_unsubscribe"
         android:layout_width="wrap_content"
         android:layout_height="44dp"
@@ -36,7 +36,7 @@
         app:layout_constraintRight_toRightOf="parent"
         android:layout_marginTop="16dp"/>
 
-    <Button
+    <androidx.appcompat.widget.AppCompatButton
         android:id="@+id/button_publish"
         android:layout_width="wrap_content"
         android:layout_height="44dp"
@@ -46,4 +46,4 @@
         app:layout_constraintRight_toRightOf="parent"
         android:layout_marginTop="16dp"/>
 
-</android.support.constraint.ConstraintLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

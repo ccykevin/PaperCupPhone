@@ -1,9 +1,9 @@
 package com.kevincheng.papercupphoneexample
 
-import android.support.v7.app.AppCompatActivity
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import androidx.appcompat.app.AppCompatActivity
 import com.kevincheng.papercupphone.PaperCupPhoneAdapter
 import com.kevincheng.papercupphone.PaperCupPhone
 import com.orhanobut.logger.Logger
