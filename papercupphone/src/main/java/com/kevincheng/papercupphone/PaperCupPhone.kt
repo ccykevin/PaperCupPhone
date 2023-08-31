@@ -147,7 +147,7 @@ class PaperCupPhone : Service() {
         mCommunicationHandler.removeCallbacksAndMessages(null)
         mCommunicationThread.quit()
 
-        mMQTTAndroidClient.disconnectImmediately()
+        if (::mMQTTAndroidClient.isInitialized) mMQTTAndroidClient.disconnectImmediately()
         sendOutConnectionStatus(false) // Notify that the connection has been disconnected
         if (isForeground) stopForeground(true)
         super.onDestroy()
