@@ -8,8 +8,6 @@ import android.content.Context
 import android.content.Intent
 import android.os.*
 import androidx.core.app.NotificationCompat
-import android.system.ErrnoException
-import android.system.OsConstants
 import android.util.Log
 import com.kevincheng.papercupphone.paho.MqttAndroidClientExtended
 import com.orhanobut.logger.Logger
@@ -19,8 +17,6 @@ import org.greenrobot.eventbus.Subscribe
 import org.greenrobot.eventbus.ThreadMode
 import java.io.Serializable
 import java.lang.ref.WeakReference
-import java.net.NoRouteToHostException
-import java.net.SocketException
 import java.util.*
 import java.util.concurrent.CountDownLatch
 import kotlin.collections.ArrayList
@@ -57,9 +53,11 @@ class PaperCupPhone : Service() {
     private var isConnectionCompletedOnce: Boolean = false
     private var isDestroyed: Boolean = false
     private var didSetupDisconnectedBufferOptions: Boolean = false
+    private var isForeground: Boolean = false
     private var isDebug: Boolean = false
 
     override fun onCreate() {
+        Logger.t("PAPER_CUP_PHONE").i("onCreate")
         isRunning = true
         mBackgroundThread =
             HandlerThread("PaperCupPhone-BackgroundThread", Process.THREAD_PRIORITY_BACKGROUND)
@@ -70,7 +68,7 @@ class PaperCupPhone : Service() {
         mCommunicationThread.start()
         mCommunicationHandler = Handler(mCommunicationThread.looper)
         EventBus.getDefault().register(this@PaperCupPhone)
-        startForeground()
+        EventBus.getDefault().post(Event.OnCreated)
     }
 
     override fun onBind(intent: Intent?): IBinder? {
@@ -81,8 +79,13 @@ class PaperCupPhone : Service() {
         this.startId = startId
 
         val launcher = intent?.getSerializableExtra(Launcher.name) as? Launcher
+        EventBus.getDefault().post(Event.OnStartCommand(launcher, flags, startId))
+        Logger.t("PAPER_CUP_PHONE").i("Service@$startId onStartCommand launcher@$launcher, flags@$flags")
 
         if (launcher != null) {
+            isForeground = launcher.foregroundConfig != null
+            if(isForeground) startForeground(requireNotNull(launcher.foregroundConfig))
+
             mClientId = launcher.client.id
             mBrokerURI = launcher.client.brokerURI
             mInitializeSubscriptionTopic = launcher.initialTopics?.topics ?: arrayOf()
@@ -126,14 +129,17 @@ class PaperCupPhone : Service() {
 
             if (isDebug) Logger.t("PAPER_CUP_PHONE")
                 .i("Service@$startId Has Started\nClient Id: $mClientId")
+
+            return launcher.startCommand
         } else {
             stopSelf()
         }
 
-        return START_REDELIVER_INTENT
+        return super.onStartCommand(intent, flags, startId)
     }
 
     override fun onDestroy() {
+        Logger.t("PAPER_CUP_PHONE").i("Service@$startId onDestroy")
         isRunning = false
         EventBus.getDefault().unregister(this@PaperCupPhone)
         mBackgroundHandler.removeCallbacksAndMessages(null)
@@ -142,14 +148,15 @@ class PaperCupPhone : Service() {
         mCommunicationThread.quit()
 
         mMQTTAndroidClient.disconnectImmediately()
-        stopForeground(true)
+        sendOutConnectionStatus(false) // Notify that the connection has been disconnected
+        if (isForeground) stopForeground(true)
         super.onDestroy()
         isDestroyed = true
         Logger.t("PAPER_CUP_PHONE").i("Service@$startId Has Been Destroyed\nClient Id: $mClientId")
-        sendOutConnectionStatus(false) // Notify that the connection has been disconnected
+        EventBus.getDefault().post(Event.OnDestroyed)
     }
 
-    private fun startForeground() {
+    private fun startForeground(config: Launcher.ForegroundConfig) {
         val channelId =
             when {
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.O -> {
@@ -175,13 +182,13 @@ class PaperCupPhone : Service() {
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .setSmallIcon(R.drawable.ic_connect)
-            .setContentTitle("PaperCupPhone Service is running")
+            .setContentTitle(config.contentTitle)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             notificationBuilder.setCategory(Notification.CATEGORY_SERVICE)
         }
 
-        startForeground(88888, notificationBuilder.build())
+        startForeground(config.id, notificationBuilder.build())
     }
 
     private fun connectToBroker() {
@@ -761,12 +768,13 @@ class PaperCupPhone : Service() {
         val client: Client,
         val connectOptions: ConnectOptions,
         val initialTopics: Topics? = null,
+        val startCommand: Int,
+        val foregroundConfig: ForegroundConfig?,
         val isDebug: Boolean
     ) : Serializable {
         companion object {
             const val name = "Launcher"
         }
-
         data class Client(val brokerURI: String, val id: String) : Serializable
         data class ConnectOptions(
             val isAutomaticReconnect: Boolean,
@@ -776,7 +784,6 @@ class PaperCupPhone : Service() {
             val account: Account? = null,
             val will: Will? = null
         ) : Serializable
-
         data class Account(val username: String, val password: String) : Serializable
         data class Will(
             val topic: String,
@@ -784,11 +791,15 @@ class PaperCupPhone : Service() {
             val qos: Int,
             val retained: Boolean
         ) : Serializable
-
         data class Topics(val topics: Array<String>, val QoSs: IntArray) : Serializable
+        data class ForegroundConfig(val id: Int, val contentTitle: String) : Serializable
     }
 
     sealed class Event {
+        object OnCreated : Event()
+        data class OnStartCommand(val launcher: Launcher?, val flags: Int, val startId: Int) : Event()
+        object OnDestroyed : Event()
+
         object GetConnectionStatus : Event()
         data class IncomingMessage(val topic: String, val message: String) : Event()
         data class ConnectionStatus(val isConnected: Boolean) : Event()
