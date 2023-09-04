@@ -34,7 +34,7 @@ class PaperCupPhone : Service() {
     private lateinit var mBrokerURI: String
     private lateinit var mMQTTAndroidClient: MqttAndroidClientExtended
     private lateinit var mMQTTConnectOptions: MqttConnectOptions
-    private lateinit var mClientId: String
+    private var mClientId: String = ""
     private lateinit var mCallback: MQTTCallback
     private lateinit var mMQTTConnectionListener: MQTTConnectionListener
     private lateinit var mInitializeSubscriptionTopic: Array<String>
@@ -153,7 +153,7 @@ class PaperCupPhone : Service() {
         super.onDestroy()
         isDestroyed = true
         Logger.t("PAPER_CUP_PHONE").i("Service@$startId Has Been Destroyed\nClient Id: $mClientId")
-        EventBus.getDefault().post(Event.OnDestroyed)
+        EventBus.getDefault().post(Event.OnDestroyed(startId, mClientId))
     }
 
     private fun startForeground(config: Launcher.ForegroundConfig) {
@@ -593,6 +593,7 @@ class PaperCupPhone : Service() {
                     gate.countDown()
                 }
                 gate.await()
+                EventBus.getDefault().post(Event.Topic.SubscribeResult(event, isSuccess))
                 when (isSuccess) {
                     true -> break@whileloop
                     else -> {
@@ -650,6 +651,7 @@ class PaperCupPhone : Service() {
                     gate.countDown()
                 }
                 gate.await()
+                EventBus.getDefault().post(Event.Topic.UnsubscribeResult(event, isSuccess))
                 when (isSuccess) {
                     true -> {
                         val newTopic = ArrayList<String>()
@@ -753,6 +755,7 @@ class PaperCupPhone : Service() {
                     gate.countDown()
                 }
                 gate.await()
+                EventBus.getDefault().post(Event.Topic.PublishMessageResult(event, isSuccess))
                 when (isSuccess) {
                     true -> break@whileloop
                     else -> {
@@ -798,7 +801,7 @@ class PaperCupPhone : Service() {
     sealed class Event {
         object OnCreated : Event()
         data class OnStartCommand(val launcher: Launcher?, val flags: Int, val startId: Int) : Event()
-        object OnDestroyed : Event()
+        data class OnDestroyed(val startId: Int, val clientId: String) : Event()
 
         object GetConnectionStatus : Event()
         data class IncomingMessage(val topic: String, val message: String) : Event()
@@ -806,13 +809,18 @@ class PaperCupPhone : Service() {
 
         sealed class Topic {
             data class Subscribe(val topic: Array<String>, val qos: IntArray) : Topic()
+            data class SubscribeResult(val subscribeEvent: Subscribe, val isSuccess: Boolean) : Topic()
+
             data class Unsubscribe(val topic: Array<String>) : Topic()
+            data class UnsubscribeResult(val unsubscribeEvent: Unsubscribe, val isSuccess: Boolean) : Topic()
+
             data class PublishMessage(
                 val topic: String,
                 val message: String,
                 val qos: Int,
                 val isRetained: Boolean
             ) : Topic()
+            data class PublishMessageResult(val publishMessageEvent: PublishMessage, val isSuccess: Boolean) : Topic()
         }
     }
 }
