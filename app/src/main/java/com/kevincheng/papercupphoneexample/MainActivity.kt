@@ -65,6 +65,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     @Subscribe(threadMode = ThreadMode.BACKGROUND)
+    fun onMessageEvent(event: PaperCupPhone.Event.Initialized) {
+        Logger.d("Service Initialized")
+    }
+
+    @Subscribe(threadMode = ThreadMode.BACKGROUND)
     fun onMessageEvent(event: PaperCupPhone.Event.Topic.SubscribeResult) {
         Logger.d("Subscribe\ntopic:${event.subscribeEvent.topic.joinToString()} \nisSuccess: ${event.isSuccess}")
     }
