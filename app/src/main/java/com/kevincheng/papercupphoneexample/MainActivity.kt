@@ -64,6 +64,21 @@ class MainActivity : AppCompatActivity() {
         Logger.d("isConnected: ${event.isConnected}")
     }
 
+    @Subscribe(threadMode = ThreadMode.BACKGROUND)
+    fun onMessageEvent(event: PaperCupPhone.Event.Topic.SubscribeResult) {
+        Logger.d("Subscribe\ntopic:${event.subscribeEvent.topic.joinToString()} \nisSuccess: ${event.isSuccess}")
+    }
+
+    @Subscribe(threadMode = ThreadMode.BACKGROUND)
+    fun onMessageEvent(event: PaperCupPhone.Event.Topic.UnsubscribeResult) {
+        Logger.d("Unsubscribe\ntopic:${event.unsubscribeEvent.topic.joinToString()} \nisSuccess: ${event.isSuccess}")
+    }
+
+    @Subscribe(threadMode = ThreadMode.BACKGROUND)
+    fun onMessageEvent(event: PaperCupPhone.Event.Topic.PublishMessageResult) {
+        Logger.d("PublishMessage\ntopic:${event.publishMessageEvent.topic}\nmessage: ${event.publishMessageEvent.message}\nisSuccess: ${event.isSuccess}")
+    }
+
     class RepeatPublishMessageRunnable(private val handler: Handler): Runnable {
         private var count = 0
 
