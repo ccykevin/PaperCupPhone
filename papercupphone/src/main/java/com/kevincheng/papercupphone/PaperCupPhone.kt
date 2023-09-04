@@ -221,7 +221,10 @@ class PaperCupPhone : Service() {
                 mInitializeSubscriptionQoS,
                 InitializeSubscriptionListener(WeakReference(this@PaperCupPhone), CountDownLatch(1))
             )
-            false -> mCallback.isInitialized = true
+            false -> {
+                mCallback.isInitialized = true
+                EventBus.getDefault().post(Event.Initialized)
+            }
         }
     }
 
@@ -464,6 +467,7 @@ class PaperCupPhone : Service() {
             Logger.t("PAPER_CUP_PHONE").d(
                 "Topics${self.mInitializeSubscriptionTopic.contentToString()} Subscription Success\nCurrent: ${self.mSubscriptionTopic.contentToString()},${self.mSubscriptionQoS.contentToString()}"
             )
+            EventBus.getDefault().post(Event.Initialized)
             gate.countDown()
         }
 
@@ -801,6 +805,7 @@ class PaperCupPhone : Service() {
     sealed class Event {
         object OnCreated : Event()
         data class OnStartCommand(val launcher: Launcher?, val flags: Int, val startId: Int) : Event()
+        object Initialized : Event()
         data class OnDestroyed(val startId: Int, val clientId: String) : Event()
 
         object GetConnectionStatus : Event()
